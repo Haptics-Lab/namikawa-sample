@@ -1,11 +1,18 @@
 ## サンプル内容
 データの読み込みとプロットのシンプルなプログラム。
+### single_plot()
 - CSVファイルを読み込む
 - x-yデータをプロットする
 - 画像として保存する
 
-xとyのデータを持つCSVファイルを data/sample_data.csv として用意しています。  
-実行後、`output/plot_sample.png`のファイルが生成されます。
+xとyのデータを持つCSVファイルを data/sample_data_001.csv として用意しています。  
+実行後、`output/plot_sample_001.png`のファイルが生成されます。
+
+### multi_plot()
+- 複数のプロットを作成する
+
+tとx1~x4のデータを持つCSVファイルを data/sample_data_002.csv として用意しています。  
+実行後、`output/plot_sample_002.png`のファイルが生成されます。
 
 ## ディレクトリ構成
 ```
