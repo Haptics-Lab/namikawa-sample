@@ -14,16 +14,26 @@ xとyのデータを持つCSVファイルを data/sample_data_001.csv として�
 tとx1~x4のデータを持つCSVファイルを data/sample_data_002.csv として用意しています。  
 実行後、`output/plot_sample_002.png`のファイルが生成されます。
 
+### nested_folder_plot()
+- 階層フォルダからCSVファイルをまとめて読み込む
+- `glob` を使って再帰的にファイルを探す
+- ファイルごとに図を自動保存する
+
+`data/raw/hierarchical/participant_*/trial_*/*.csv` にあるCSVファイルをまとめて読み込みます。  
+各CSVのx, yデータに対応する図を `output/hierarchical/` 以下に保存します。
+
+
 ## ディレクトリ構成
 ```
 sample_001/
 ├── main.py
 │
 ├── data/           
-│   ├── raw/        ← 生データ
-│   └── processed/  ← 編集したデータ
+│   ├── raw/                ← 生データ
+│   │   └── hierarchical/   ← 階層フォルダのサンプルデータ
+│   └── processed/          ← 編集したデータ
 │
-├── output/         ← 結果など
+├── output/                 ← 結果など
 │
 └── README.md
 ```

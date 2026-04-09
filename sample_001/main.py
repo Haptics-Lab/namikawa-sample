@@ -1,3 +1,6 @@
+from glob import glob
+from pathlib import Path
+
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -69,6 +72,36 @@ def multi_plot():
     plt.tight_layout() # レイアウトの調整
     plt.savefig("output/plot_sample_002.png", dpi=200)
 
+
+def nested_folder_plot():
+    """
+    階層フォルダ内のCSVをまとめて読み込み、ファイルごとに図を保存する関数
+    """
+    input_root = Path("data/raw/hierarchical")
+    output_root = Path("output/hierarchical")
+
+    csv_paths = csv_paths = sorted(input_root.glob("participant_*/trial_*/*.csv"))
+
+    for csv_path_str in csv_paths:
+        csv_path = Path(csv_path_str)
+        
+        df = pd.read_csv(csv_path)
+
+        relative_parent = csv_path.parent.relative_to(input_root)
+        save_dir = output_root / relative_parent
+        save_dir.mkdir(parents=True, exist_ok=True)
+        save_path = save_dir / "plot_sample.png"
+
+        plt.plot(df["x"], df["y"])
+        plt.xlabel("x axis")
+        plt.ylabel("y axis")
+        plt.xlim(0, 10)
+        plt.ylim(-1, 1)
+        plt.tight_layout()
+        plt.savefig(save_path, dpi=200)
+        plt.close()
+
 if __name__ == "__main__":
-    single_plot()
-    multi_plot()
+    # single_plot()
+    # multi_plot()
+    nested_folder_plot()
