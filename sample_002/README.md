@@ -19,13 +19,27 @@ OSはWindowsを想定しています。
 uvを使用します。uvの導入までは事前に行ってください。  
 また、必要に応じてNI-DAQmx driverをインストールしてください。  
 
+### 方法1
 `sample_002/`をPCにコピーして、以下のコマンドを実行してください。
 ```
 sample_002 % uv sync
 ```
-必要なライブラリが用意できていれば、`ni_adc.py`のみでも動きます。
+### 方法2
+必要なライブラリ(numpyとnidaqmx)が用意できていれば、`ni_adc.py`のみでも動きます。  
+リポジトリから`ni_adc.py`をダウンロードして、ご自身のプロジェクト内で使用してください。
+`ni_adc.py`のみをダウンロードする方が容易なため、<b>こちらの方法をおすすめします</b>。
+```
+sample_002 % uv add numpy nidaqmx
+```
 
 ## 実行方法
+### 方法1
+`sample_002/`のフォルダごとコピーした方は`main.py`の実行で動きます。
 ```
-sample_001 % uv run main.py
+sample_002 % uv run main.py
+```
+### 方法2
+`ni_adc.py`をダウンロードした方は、`ni_adc.py`の実行で動きます。
+```
+sample_002 % uv run ni_adc.py
 ```
