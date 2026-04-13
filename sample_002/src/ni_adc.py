@@ -77,7 +77,7 @@ class NIADC:
             expected_block_sec = self.samples_per_read / self.sampling_rate
 
             task.start()
-            print(f"Started streaming data with NI DAQ.")
+            print(f"Started streaming data with NI DAQ. Ctrl+C to stop.")
             print(f"    Writing to {csv_path}")
 
             try:
@@ -116,4 +116,4 @@ if __name__ == "__main__":
         channel_configs=channel_configs
     )
 
-    adc.stream_to_csv(Path("output/ni_data.csv"))
+    adc.stream_to_csv(Path("output\\ni_data.csv"))

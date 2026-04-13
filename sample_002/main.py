@@ -4,10 +4,11 @@ from src.ni_adc import ChannelConfig, NIADC, TerminalConfiguration
 
 def main():
     channel_configs = [
-        ChannelConfig(ch="ai0", ch_label="Channel 0", terminal_config=TerminalConfiguration.RSE, voltage_range=(-1.0, 1.0)),
-        ChannelConfig(ch="ai1", ch_label="Channel 1", terminal_config=TerminalConfiguration.RSE, voltage_range=(-1.0, 1.0)),
-        ChannelConfig(ch="ai2", ch_label="Channel 2", terminal_config=TerminalConfiguration.RSE, voltage_range=(-1.0, 1.0)),
-        ChannelConfig(ch="ai3", ch_label="Channel 3", terminal_config=TerminalConfiguration.RSE, voltage_range=(-1.0, 1.0)),
+        ChannelConfig(ch="ai0", ch_label="Tactile LI", terminal_config=TerminalConfiguration.RSE, voltage_range=(-2.0, 2.0)),
+        ChannelConfig(ch="ai1", ch_label="Tactile LT", terminal_config=TerminalConfiguration.RSE, voltage_range=(-2.0, 2.0)),
+        ChannelConfig(ch="ai2", ch_label="Tactile RI", terminal_config=TerminalConfiguration.RSE, voltage_range=(-2.0, 2.0)),
+        ChannelConfig(ch="ai3", ch_label="Tactile RT", terminal_config=TerminalConfiguration.RSE, voltage_range=(-2.0, 2.0)),
+        ChannelConfig(ch="ai12", ch_label="Sync Signal", terminal_config=TerminalConfiguration.RSE, voltage_range=(-0.5, 5.0)),
     ]
 
     adc = NIADC(
