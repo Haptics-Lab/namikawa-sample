@@ -8,10 +8,11 @@ repository/
 ├── sample_001/
 ├── sample_002/
 ```
-各サンプルは以下のような構成を持ちます：
+各サンプルは基本的に以下のような構成を持ちます：
 ```
 sample_xxx/
 ├── main.py
+├── src/ 
 ├── pyproject.toml
 ├── README.md
 ├── data/
@@ -23,6 +24,10 @@ sample_xxx/
 - CSVファイルを読み込む
 - データをプロットする
 - 画像として保存する
+
+### sample_002
+- NIのDAQデバイスでデータを取得する
+- CSVファイルにデータを保存する
 
 ## 注意点
 - `.venv/` はGit管理されていません
