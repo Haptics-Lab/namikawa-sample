@@ -33,7 +33,7 @@ sample_002 % uv add numpy nidaqmx
 
 ## 実行方法
 ### 方法1
-`sample_002/`のフォルダごとコピーした方は`main.py`の実行で動きます。
+`sample_002/`のフォルダごとコピーした方は、`main.py`の実行で動きます。
 ```
 sample_002 % uv run main.py
 ```
