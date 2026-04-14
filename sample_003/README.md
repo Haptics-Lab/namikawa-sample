@@ -31,7 +31,7 @@ sample_003 % uv add numpy sounddevice scipy
 
 ## 実行方法
 ### 方法1
-`sample_003/`のフォルダごとコピーした方は`main.py`の実行で動きます。
+`sample_003/`のフォルダごとコピーした方は、`main.py`の実行で動きます。
 ```
 sample_003 % uv run main.py
 ```
