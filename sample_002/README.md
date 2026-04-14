@@ -6,8 +6,8 @@ NIのDAQでCSVにデータを記録するプログラム。
 sample_002/
 ├── main.py
 │
-├── src/           
-│   └── ni_adc.py   ← 編集したデータ
+├── src/
+│   └── ni_adc.py
 │
 ├── output/         ← 結果など
 │
