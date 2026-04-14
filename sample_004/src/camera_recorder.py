@@ -103,8 +103,10 @@ if __name__ == "__main__":
     CameraRecorder.check_device(max_devices=5)
 
     configs = [
+        CameraConfig(device=0, output_path=Path("output\\cam0.mp4")),
         CameraConfig(device=1, output_path=Path("output\\cam1.mp4")),
         CameraConfig(device=2, output_path=Path("output\\cam2.mp4")),
+        CameraConfig(device=3, output_path=Path("output\\cam3.mp4")),
     ]
 
     record_multiple_cameras(configs)
