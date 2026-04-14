@@ -11,10 +11,6 @@ class AudioRecorder:
         self.sample_rate = sample_rate
         self.channels = channels
         self.blocksize = blocksize
-
-    def check_device(self):
-        print("Available audio input devices:")
-        print(sd.query_devices())
         
     def record(self, wav_path: Path):
         
@@ -52,6 +48,14 @@ class AudioRecorder:
             else:
                 print("No audio data recorded.")
 
+    @staticmethod
+    def check_device():
+        print("Available audio input devices:")
+        print(sd.query_devices())
+
 if __name__ == "__main__":
+    
+    AudioRecorder.check_device()
+
     recorder = AudioRecorder(device=1, sample_rate=44100, channels=2, blocksize=1024)
     recorder.record(Path("output\\audio_data.wav"))
