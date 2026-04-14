@@ -28,7 +28,7 @@ tとx1~x4のデータを持つCSVファイルを`data/sample_data_002.csv` と�
 sample_001/
 ├── main.py
 │
-├── data/           
+├── data/
 │   ├── raw/                ← 生データ
 │   │   └── hierarchical/   ← 階層フォルダのサンプルデータ
 │   └── processed/          ← 編集したデータ
