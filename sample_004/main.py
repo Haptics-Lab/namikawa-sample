@@ -11,3 +11,6 @@ def main():
     ]
 
     record_multiple_cameras(configs)
+
+if __name__ == "__main__":
+    main()
