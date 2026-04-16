@@ -124,6 +124,7 @@ class NatNetClient:
         self.data_socket = None
 
         self.stop_threads = False
+        self.data_descriptions = None
 
     # Client/server message ids
     NAT_CONNECT = 0
@@ -1094,6 +1095,7 @@ class NatNetClient:
             data_dict["received_time_ns"] = packet_received_time_ns
             data_dict["is_recording"] = is_recording
             data_dict["tracked_models_changed"] = tracked_models_changed
+            data_dict["data_descriptions"] = self.data_descriptions
 
             self.new_frame_listener(data_dict)
 
@@ -1114,6 +1116,7 @@ class NatNetClient:
             data_dict["tracked_models_changed"] = tracked_models_changed
             data_dict["offset"] = offset
             data_dict["mocap_data"] = mocap_data
+            data_dict["data_descriptions"] = self.data_descriptions
             self.new_frame_with_data_listener(data_dict)
 
         return offset, mocap_data
@@ -2109,6 +2112,7 @@ class NatNetClient:
             trace("Packet Size: %d" % packet_size)
             offset_tmp, data_descs = self.__unpack_data_descriptions(data[offset:], packet_size, major, minor) #type: ignore  # noqa E501
             offset += offset_tmp
+            self.data_descriptions = data_descs
             print("Data Descriptions:\n")
             # get a string version of the data for output
             data_descs_str = data_descs.get_as_string()
@@ -2297,6 +2301,7 @@ class NatNetClient:
         # Required for setup
         # Get NatNet and server versions
         self.send_request(self.command_socket, self.NAT_CONNECT, "", (self.server_ip_address, self.command_port)) #type: ignore  # noqa E501
+        self.send_request(self.command_socket, self.NAT_REQUEST_MODELDEF, "", (self.server_ip_address, self.command_port)) #type: ignore  # noqa E501
 
         # Example Commands
         # Get NatNet and server versions

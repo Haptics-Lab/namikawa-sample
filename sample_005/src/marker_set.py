@@ -18,6 +18,13 @@ class MarkerSample:
     positions: list[Vector3]
 
 
+@dataclass
+class MarkerSetInfo:
+    csv_path: Path
+    marker_count: int
+    column_order: list[int]
+
+
 class MarkerSetReceiver:
     def __init__(self, config: NatNetConfig):
         self.config = config
@@ -28,21 +35,88 @@ class MarkerSetReceiver:
             return raw_name.decode("utf-8", errors="replace")
         return str(raw_name) if raw_name else "(no-name)"
 
-    @staticmethod
-    def parse_frame(frame: dict) -> list[tuple[str, list[Vector3]]]:
+    @classmethod
+    def parse_frame(cls, frame: dict) -> list[tuple[str, list[Vector3]]]:
         mocap_data = frame.get("mocap_data")
         if mocap_data is None or mocap_data.marker_set_data is None:
             return []
 
-        marker_sets = []
+        result = []
         for marker_set in mocap_data.marker_set_data.marker_data_list:
-            name = MarkerSetReceiver._normalize_name(marker_set.model_name)
+            name = cls._normalize_name(marker_set.model_name)
             if name == "all":
                 continue
-
             positions = [tuple(pos) for pos in marker_set.marker_pos_list]
-            marker_sets.append((name, positions))
-        return marker_sets
+            result.append((name, positions))
+        return result
+
+    @classmethod
+    def get_marker_set_labels(cls, frame: dict) -> dict[str, list[str]]:
+        data_descriptions = frame.get("data_descriptions")
+        marker_set_list = getattr(data_descriptions, "marker_set_list", None)
+        if marker_set_list is None:
+            return {}
+
+        labels_by_set = {}
+        for desc in marker_set_list:
+            set_name = cls._normalize_name(getattr(desc, "marker_set_name", None))
+            if not set_name or set_name == "all":
+                continue
+
+            raw_labels = getattr(desc, "marker_names_list", None) or []
+            labels_by_set[set_name] = [cls._normalize_name(x) for x in raw_labels]
+
+        return labels_by_set
+
+    @staticmethod
+    def _build_column_prefixes(
+            marker_count: int,
+            marker_labels: Optional[list[str]] = None,
+            ) -> list[str]:
+        
+        labels = marker_labels or []
+        counts: dict[str, int] = defaultdict(int)
+        prefixes = []
+
+        for i in range(marker_count):
+            name = labels[i].strip() if i < len(labels) else ""
+            if not name:
+                name = str(i)
+
+            counts[name] += 1
+            if counts[name] > 1:
+                name = f"{name}_{counts[name]}"
+
+            prefixes.append(name)
+
+        return prefixes
+
+    @classmethod
+    def _build_column_order(
+            cls,
+            marker_count: int,
+            marker_labels: Optional[list[str]] = None,
+            ) -> list[int]:
+        
+        prefixes = cls._build_column_prefixes(marker_count, marker_labels)
+        return sorted(range(marker_count), key=lambda i: prefixes[i])
+
+    @staticmethod
+    def _get_timestamps(frame: dict) -> tuple[float, Optional[float]]:
+        received_time_ns = frame.get("received_time_ns")
+        wallclock = (
+            received_time_ns / 1_000_000_000.0
+            if isinstance(received_time_ns, int) and received_time_ns >= 0
+            else time.time()
+        )
+
+        timestamp = frame.get("timestamp")
+        motive = (
+            float(timestamp)
+            if isinstance(timestamp, (int, float)) and timestamp >= 0
+            else None
+        )
+        return wallclock, motive
 
     @staticmethod
     def print_marker_sets(marker_sets: list[tuple[str, list[Vector3]]]) -> None:
@@ -51,32 +125,33 @@ class MarkerSetReceiver:
             for i, (x, y, z) in enumerate(positions):
                 print(f"  idx={i} pos=({x:.3f}, {y:.3f}, {z:.3f})")
 
-    @staticmethod
-    def get_wallclock_timestamp(frame: dict) -> float:
-        received_time_ns = frame.get("received_time_ns")
-        if isinstance(received_time_ns, int) and received_time_ns >= 0:
-            return received_time_ns / 1_000_000_000.0
-        return time.time()
+    @classmethod
+    def create_csv(
+            cls,
+            path: Path,
+            marker_count: int,
+            column_order: list[int],
+            marker_labels: Optional[list[str]] = None,
+            ) -> None:
+        
+        prefixes = cls._build_column_prefixes(marker_count, marker_labels)
 
-    @staticmethod
-    def get_motive_timestamp(frame: dict) -> Optional[float]:
-        timestamp = frame.get("timestamp")
-        if isinstance(timestamp, (int, float)) and timestamp >= 0:
-            return float(timestamp)
-        return None
-
-    @staticmethod
-    def create_csv(path: Path, marker_count: int) -> None:
         header = ["wallclock_timestamp", "motive_timestamp"]
-        for i in range(marker_count):
-            header += [f"{i}_x", f"{i}_y", f"{i}_z"]
+        for idx in column_order:
+            p = prefixes[idx]
+            header.extend([f"{p}_x", f"{p}_y", f"{p}_z"])
 
         with path.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(header)
+            csv.writer(f).writerow(header)
 
     @staticmethod
-    def append_samples(path: Path, samples: list[MarkerSample], marker_count: int) -> None:
+    def append_samples(
+            path: Path,
+            samples: list[MarkerSample],
+            marker_count: int,
+            column_order: list[int],
+            ) -> None:
+        
         with path.open("a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
 
@@ -87,12 +162,11 @@ class MarkerSetReceiver:
                     )
 
                 row = [sample.wallclock_timestamp, sample.motive_timestamp]
-
-                for x, y, z in sample.positions:
-                    row += [x, y, z]
-
-                missing = marker_count - len(sample.positions)
-                row += [""] * (missing * 3)
+                for idx in column_order:
+                    if idx < len(sample.positions):
+                        row.extend(sample.positions[idx])
+                    else:
+                        row.extend(["", "", ""])
 
                 writer.writerow(row)
 
@@ -106,7 +180,7 @@ class MarkerSetReceiver:
         if csv_folder_path is not None:
             csv_folder_path.mkdir(parents=True, exist_ok=True)
 
-        marker_counts: dict[str, int] = {}
+        marker_infos: dict[str, MarkerSetInfo] = {}
         pending_samples: dict[str, list[MarkerSample]] = defaultdict(list)
         pending_frame_count = 0
 
@@ -116,9 +190,15 @@ class MarkerSetReceiver:
                 return
 
             for name, samples in pending_samples.items():
-                if samples:
-                    csv_path = csv_folder_path / f"{name}.csv"
-                    self.append_samples(csv_path, samples, marker_counts[name])
+                if not samples:
+                    continue
+                info = marker_infos[name]
+                self.append_samples(
+                    info.csv_path,
+                    samples,
+                    info.marker_count,
+                    info.column_order,
+                )
 
             pending_samples.clear()
             pending_frame_count = 0
@@ -136,23 +216,37 @@ class MarkerSetReceiver:
             if csv_folder_path is None:
                 return
 
-            wallclock = self.get_wallclock_timestamp(frame)
-            motive = self.get_motive_timestamp(frame)
+            labels_by_set = self.get_marker_set_labels(frame)
+            wallclock, motive = self._get_timestamps(frame)
 
             for name, positions in marker_sets:
                 count = len(positions)
 
-                if name not in marker_counts:
-                    marker_counts[name] = count
+                if name not in marker_infos:
+                    labels = labels_by_set.get(name)
+                    column_order = self._build_column_order(count, labels)
                     csv_path = csv_folder_path / f"{name}.csv"
-                    self.create_csv(csv_path, count)
+
+                    self.create_csv(
+                        csv_path,
+                        count,
+                        column_order,
+                        marker_labels=labels,
+                    )
+
+                    marker_infos[name] = MarkerSetInfo(
+                        csv_path=csv_path,
+                        marker_count=count,
+                        column_order=column_order,
+                    )
+
                     print(f"Started streaming data with Motive marker set '{name}'. Ctrl+C to stop.")
                     print(f"    Writing to {csv_path}")
 
-                elif count > marker_counts[name]:
+                elif count > marker_infos[name].marker_count:
                     raise ValueError(
                         f"Marker count increased for '{name}' "
-                        f"from {marker_counts[name]} to {count}"
+                        f"from {marker_infos[name].marker_count} to {count}"
                     )
 
                 pending_samples[name].append(
