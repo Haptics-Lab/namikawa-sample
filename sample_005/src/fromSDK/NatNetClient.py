@@ -2113,10 +2113,10 @@ class NatNetClient:
             offset_tmp, data_descs = self.__unpack_data_descriptions(data[offset:], packet_size, major, minor) #type: ignore  # noqa E501
             offset += offset_tmp
             self.data_descriptions = data_descs
-            print("Data Descriptions:\n")
             # get a string version of the data for output
             data_descs_str = data_descs.get_as_string()
             if print_level > 0:
+                print("Data Descriptions:\n")
                 print(" %s\n" % (data_descs_str))
 
         elif message_id == self.NAT_SERVERINFO:
