@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from src.natnet_stream import NatNetConfig
 from src.marker_set import MarkerSetReceiver
 from src.rigid_body import RigidBodyReceiver
@@ -5,12 +7,27 @@ from src.skeleton import SkeletonReceiver
 
 
 def stream_marker_sets(config: NatNetConfig) -> None:
-    MarkerSetReceiver(config=config).stream()
+    '''
+    Streams marker set data from the NatNet server.
+    '''
+    MarkerSetReceiver(config=config).stream(
+        print_enabled=False,
+        csv_folder_path=Path("output") / "marker_sets",
+    )
 
 def stream_rigid_bodies(config: NatNetConfig) -> None:
-    RigidBodyReceiver(config=config).stream()
+    '''
+    Streams rigid body data from the NatNet server.
+    '''
+    RigidBodyReceiver(config=config).stream(
+        print_enabled=False,
+        csv_folder_path=Path("output") / "rigid_bodies",
+    )
 
 def stream_skeletons(config: NatNetConfig) -> None:
+    '''
+    Streams skeleton data from the NatNet server.
+    '''
     SkeletonReceiver(config=config).stream()
 
 
