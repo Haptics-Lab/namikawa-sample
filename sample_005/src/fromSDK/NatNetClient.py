@@ -124,6 +124,7 @@ class NatNetClient:
         self.data_socket = None
 
         self.stop_threads = False
+        self.data_descriptions = None
 
     # Client/server message ids
     NAT_CONNECT = 0
@@ -1005,7 +1006,7 @@ class NatNetClient:
         return offset, frame_suffix_data
 
     # Unpack data from a motion capture frame message
-    def __unpack_mocap_data(self, data: bytes, packet_size, major, minor):
+    def __unpack_mocap_data(self, data: bytes, packet_size, major, minor, packet_received_time_ns=None):
         mocap_data = MoCapData.MoCapData()
         data = memoryview(data)
         offset = 0
@@ -1091,8 +1092,10 @@ class NatNetClient:
             data_dict["timecode"] = timecode
             data_dict["timecode_sub"] = timecode_sub
             data_dict["timestamp"] = timestamp
+            data_dict["received_time_ns"] = packet_received_time_ns
             data_dict["is_recording"] = is_recording
             data_dict["tracked_models_changed"] = tracked_models_changed
+            data_dict["data_descriptions"] = self.data_descriptions
 
             self.new_frame_listener(data_dict)
 
@@ -1108,10 +1111,12 @@ class NatNetClient:
             data_dict["timecode"] = timecode
             data_dict["timecode_sub"] = timecode_sub
             data_dict["timestamp"] = timestamp
+            data_dict["received_time_ns"] = packet_received_time_ns
             data_dict["is_recording"] = is_recording
             data_dict["tracked_models_changed"] = tracked_models_changed
             data_dict["offset"] = offset
             data_dict["mocap_data"] = mocap_data
+            data_dict["data_descriptions"] = self.data_descriptions
             self.new_frame_with_data_listener(data_dict)
 
         return offset, mocap_data
@@ -1911,15 +1916,16 @@ class NatNetClient:
         self.__nat_net_stream_version_server[3] = nnsvs[3]
         if (self.__nat_net_requested_version[0] == 0) and\
            (self.__nat_net_requested_version[1] == 0):
-            print("resetting requested version to %d %d %d %d from %d %d %d %d" % ( #type: ignore  # noqa E501
-                self.__nat_net_stream_version_server[0],
-                self.__nat_net_stream_version_server[1],
-                self.__nat_net_stream_version_server[2],
-                self.__nat_net_stream_version_server[3],
-                self.__nat_net_requested_version[0],
-                self.__nat_net_requested_version[1],
-                self.__nat_net_requested_version[2],
-                self.__nat_net_requested_version[3]))
+            if self.print_level > 0:
+                print("resetting requested version to %d %d %d %d from %d %d %d %d" % ( #type: ignore  # noqa E501
+                    self.__nat_net_stream_version_server[0],
+                    self.__nat_net_stream_version_server[1],
+                    self.__nat_net_stream_version_server[2],
+                    self.__nat_net_stream_version_server[3],
+                    self.__nat_net_requested_version[0],
+                    self.__nat_net_requested_version[1],
+                    self.__nat_net_requested_version[2],
+                    self.__nat_net_requested_version[3]))
 
             self.__nat_net_requested_version[0] = self.__nat_net_stream_version_server[0] #type: ignore  # noqa E501
             self.__nat_net_requested_version[1] = self.__nat_net_stream_version_server[1] #type: ignore  # noqa E501
@@ -1956,6 +1962,7 @@ class NatNetClient:
 
     def __command_thread_function(self, in_socket, stop, gprint_level, thread_option): #type: ignore  # noqa E501
         message_id_dict = {}
+        packet_received_time_ns = None
         if not self.use_multicast:
             in_socket.settimeout(2.0)
         data = bytearray(0) #type: ignore  # noqa F841
@@ -1969,6 +1976,7 @@ class NatNetClient:
             # Block for input
             try:
                 buffer_list[buffer_list_recv_index], addr = in_socket.recvfrom(recv_buffer_size) #type: ignore  # noqa E501
+                packet_received_time_ns = time.time_ns()
                 buffer_list_in_use_index = buffer_list_recv_index
                 buffer_list_recv_index = (buffer_list_recv_index + 1) % buffer_list_size #type: ignore  # noqa E501
             except socket.error as msg: #type: ignore  # noqa F841
@@ -2001,8 +2009,13 @@ class NatNetClient:
                             print_level = 1
                         else:
                             print_level = 0
-                message_id = self.__process_message(buffer_list[buffer_list_in_use_index], print_level) #type: ignore  # noqa E501
+                message_id = self.__process_message(
+                    buffer_list[buffer_list_in_use_index],
+                    print_level,
+                    packet_received_time_ns,
+                ) #type: ignore  # noqa E501
                 buffer_list[buffer_list_in_use_index] = bytearray(0)
+                packet_received_time_ns = None
 
             if not self.use_multicast:
                 if not stop():
@@ -2015,12 +2028,14 @@ class NatNetClient:
     def __data_thread_function(self, in_socket, stop, gprint_level):
         message_id_dict = {}
         data = bytearray(0)
+        packet_received_time_ns = None
         # 64k buffer size
         recv_buffer_size = 128*1024
         while not stop():
             # Block for input
             try:
                 data, addr = in_socket.recvfrom(recv_buffer_size)
+                packet_received_time_ns = time.time_ns()
             except socket.error as msg:
                 if not stop():
                     print("ERROR: data socket access error occurred:\n  %s" % msg) #type: ignore  # noqa E501
@@ -2049,12 +2064,13 @@ class NatNetClient:
                             print_level = 1
                         else:
                             print_level = 0
-                message_id = self.__process_message(data, print_level)
+                message_id = self.__process_message(data, print_level, packet_received_time_ns)
                 data = bytearray(0)
+                packet_received_time_ns = None
 
         return 0
 
-    def __process_message(self, data: bytes, print_level=0):
+    def __process_message(self, data: bytes, print_level=0, packet_received_time_ns=None):
         # return message ID
         major = self.get_major()
         minor = self.get_minor()
@@ -2077,7 +2093,13 @@ class NatNetClient:
             trace("Message ID : %3.1d NAT_FRAMEOFDATA" % message_id)
             trace("Packet Size: ", packet_size)
 
-            offset_tmp, mocap_data = self.__unpack_mocap_data(data[offset:], packet_size, major, minor) #type: ignore  # noqa E501
+            offset_tmp, mocap_data = self.__unpack_mocap_data(
+                data[offset:],
+                packet_size,
+                major,
+                minor,
+                packet_received_time_ns=packet_received_time_ns,
+            ) #type: ignore  # noqa E501
             offset += offset_tmp
             # print("MoCap Frame: %d\n" % (mocap_data.prefix_data.frame_number))
             # get a string version of the data for output
@@ -2090,10 +2112,11 @@ class NatNetClient:
             trace("Packet Size: %d" % packet_size)
             offset_tmp, data_descs = self.__unpack_data_descriptions(data[offset:], packet_size, major, minor) #type: ignore  # noqa E501
             offset += offset_tmp
-            print("Data Descriptions:\n")
+            self.data_descriptions = data_descs
             # get a string version of the data for output
             data_descs_str = data_descs.get_as_string()
             if print_level > 0:
+                print("Data Descriptions:\n")
                 print(" %s\n" % (data_descs_str))
 
         elif message_id == self.NAT_SERVERINFO:
@@ -2162,11 +2185,12 @@ class NatNetClient:
             packet_size = len(command_str) + 1
         elif command == self.NAT_CONNECT:
             tmp_version = [4, 2, 0, 0]
-            print("NAT_CONNECT to Motive with %d %d %d %d\n" % (
-                tmp_version[0],
-                tmp_version[1],
-                tmp_version[2],
-                tmp_version[3]))
+            if self.print_level > 0:
+                print("NAT_CONNECT to Motive with %d %d %d %d\n" % (
+                    tmp_version[0],
+                    tmp_version[1],
+                    tmp_version[2],
+                    tmp_version[3]))
 
             # allocate a byte array for 270 bytes
             # to connect with a specific version
@@ -2264,7 +2288,8 @@ class NatNetClient:
         self.data_thread = Thread(target=self.__data_thread_function, args=(self.data_socket, lambda: self.stop_threads, lambda: self.print_level,)) #type: ignore  # noqa E501
         self.command_thread = Thread(target=self.__command_thread_function, args=(self.command_socket, lambda: self.stop_threads, lambda: self.print_level, thread_option,)) #type: ignore  # noqa E501
         if thread_option == 'd':
-            print("starting data thread")
+            if self.print_level > 0:
+                print("starting data thread")
             self.command_thread.start()
             if self.command_thread.is_alive():
                 self.data_thread.start()
@@ -2276,6 +2301,7 @@ class NatNetClient:
         # Required for setup
         # Get NatNet and server versions
         self.send_request(self.command_socket, self.NAT_CONNECT, "", (self.server_ip_address, self.command_port)) #type: ignore  # noqa E501
+        self.send_request(self.command_socket, self.NAT_REQUEST_MODELDEF, "", (self.server_ip_address, self.command_port)) #type: ignore  # noqa E501
 
         # Example Commands
         # Get NatNet and server versions
