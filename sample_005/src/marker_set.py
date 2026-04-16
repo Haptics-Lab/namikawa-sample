@@ -10,22 +10,18 @@ from src.natnet_stream import NatNetConfig, run_natnet_stream
 Vector3 = tuple[float, float, float]
 
 
+# from NatNet mocap data, representing a single marker set in a single frame
 @dataclass(frozen=True)
 class MarkerSetFrame:
     name: str
     positions: list[Vector3]
 
 
+# representing a single marker set sample, used for CSV output
 @dataclass(frozen=True)
 class MarkerSetSample:
     timestamp: float
     positions: list[Vector3]
-
-
-@dataclass(frozen=True)
-class MarkerSetBatch:
-    name: str
-    samples: list[MarkerSetSample]
 
 
 class MarkerSetReceiver:
@@ -83,14 +79,14 @@ class MarkerSetReceiver:
 
     @staticmethod
     def save_marker_sets_to_csv(
-        marker_sets: list[MarkerSetBatch],
+        marker_sets_by_name: dict[str, list[MarkerSetSample]],
         folder_path: Path,
         marker_column_counts: dict[str, int],
     ) -> None:
-        for marker_set in marker_sets:
-            csv_file = folder_path / f"{marker_set.name}.csv"
+        for marker_set_name, samples in marker_sets_by_name.items():
+            csv_file = folder_path / f"{marker_set_name}.csv"
             file_exists = csv_file.exists()
-            marker_count = marker_column_counts[marker_set.name]
+            marker_count = marker_column_counts[marker_set_name]
 
             with csv_file.open("a") as f:
                 if not file_exists:
@@ -105,10 +101,10 @@ class MarkerSetReceiver:
                         )
                     f.write(",".join(header) + "\n")
 
-                for sample in marker_set.samples:
+                for sample in samples:
                     if len(sample.positions) > marker_count:
                         raise ValueError(
-                            f"Marker count increased for '{marker_set.name}' from {marker_count} to {len(sample.positions)}"
+                            f"Marker count increased for '{marker_set_name}' from {marker_count} to {len(sample.positions)}"
                         )
 
                     row = [str(sample.timestamp)]
@@ -139,12 +135,8 @@ class MarkerSetReceiver:
             if csv_folder_path is None or not pending_samples:
                 return
 
-            batched_marker_sets = [
-                MarkerSetBatch(name=name, samples=samples)
-                for name, samples in pending_samples.items()
-            ]
             self.save_marker_sets_to_csv(
-                batched_marker_sets,
+                pending_samples,
                 csv_folder_path,
                 marker_column_counts,
             )
