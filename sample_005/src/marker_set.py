@@ -111,11 +111,7 @@ class MarkerSetReceiver:
         )
 
         timestamp = frame.get("timestamp")
-        motive = (
-            float(timestamp)
-            if isinstance(timestamp, (int, float)) and timestamp >= 0
-            else None
-        )
+        motive = float(timestamp) if isinstance(timestamp, (int, float)) and timestamp >= 0 else None
         return wallclock, motive
 
     @staticmethod

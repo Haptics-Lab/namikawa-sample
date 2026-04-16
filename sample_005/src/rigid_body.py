@@ -96,7 +96,7 @@ class RigidBodyReceiver:
         return rigid_bodies
 
     @staticmethod
-    def get_timestamps(frame: dict) -> tuple[float, Optional[float]]:
+    def _get_timestamps(frame: dict) -> tuple[float, Optional[float]]:
         received_time_ns = frame.get("received_time_ns")
         wallclock = (
             received_time_ns / 1_000_000_000.0
@@ -187,7 +187,7 @@ class RigidBodyReceiver:
                 return
 
             rigid_body_names_by_id.update(self.get_rigid_body_names(frame))
-            wallclock, motive = self.get_timestamps(frame)
+            wallclock, motive = self._get_timestamps(frame)
             for rigid_body in rigid_bodies:
                 rigid_body_id = rigid_body.rigid_body_id
                 if rigid_body_id not in csv_paths_by_id:
