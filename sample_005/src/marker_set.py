@@ -1,4 +1,8 @@
+from pathlib import Path
+from typing import Optional
 from dataclasses import dataclass
+from collections import defaultdict
+import time
 
 from src.natnet_stream import NatNetConfig, run_natnet_stream
 
@@ -10,6 +14,18 @@ Vector3 = tuple[float, float, float]
 class MarkerSetFrame:
     name: str
     positions: list[Vector3]
+
+
+@dataclass(frozen=True)
+class MarkerSetSample:
+    timestamp: float
+    positions: list[Vector3]
+
+
+@dataclass(frozen=True)
+class MarkerSetBatch:
+    name: str
+    samples: list[MarkerSetSample]
 
 
 class MarkerSetReceiver:
@@ -51,14 +67,124 @@ class MarkerSetReceiver:
                     f"pos=({position[0]:.3f}, {position[1]:.3f}, {position[2]:.3f})"
                 )
 
-    def stream(self) -> None:
+    @staticmethod
+    def get_frame_timestamp(frame: dict) -> float:
+        frame_timestamp = frame.get("timestamp")
+        if isinstance(frame_timestamp, (int, float)) and frame_timestamp >= 0:
+            return float(frame_timestamp)
+
+        mocap_data = frame.get("mocap_data")
+        if mocap_data is not None and mocap_data.suffix_data is not None:
+            suffix_timestamp = mocap_data.suffix_data.timestamp
+            if isinstance(suffix_timestamp, (int, float)) and suffix_timestamp >= 0:
+                return float(suffix_timestamp)
+
+        return time.time()
+
+    @staticmethod
+    def save_marker_sets_to_csv(
+        marker_sets: list[MarkerSetBatch],
+        folder_path: Path,
+        marker_column_counts: dict[str, int],
+    ) -> None:
+        for marker_set in marker_sets:
+            csv_file = folder_path / f"{marker_set.name}.csv"
+            file_exists = csv_file.exists()
+            marker_count = marker_column_counts[marker_set.name]
+
+            with csv_file.open("a") as f:
+                if not file_exists:
+                    header = ["timestamp"]
+                    for marker_index in range(marker_count):
+                        header.extend(
+                            [
+                                f"{marker_index}_x",
+                                f"{marker_index}_y",
+                                f"{marker_index}_z",
+                            ]
+                        )
+                    f.write(",".join(header) + "\n")
+
+                for sample in marker_set.samples:
+                    if len(sample.positions) > marker_count:
+                        raise ValueError(
+                            f"Marker count increased for '{marker_set.name}' from {marker_count} to {len(sample.positions)}"
+                        )
+
+                    row = [str(sample.timestamp)]
+                    for position in sample.positions:
+                        row.extend([str(position[0]), str(position[1]), str(position[2])])
+
+                    missing_marker_count = marker_count - len(sample.positions)
+                    row.extend([""] * (missing_marker_count * 3))
+                    f.write(",".join(row) + "\n")
+
+
+    def stream(
+            self,
+            print_enabled: bool = False,
+            csv_folder_path: Optional[Path] = None,
+            csv_batch_frames: int = 30,
+            ) -> None:
+
+        if csv_folder_path is not None:
+            csv_folder_path.mkdir(parents=True, exist_ok=True)
+
+        pending_samples: dict[str, list[MarkerSetSample]] = defaultdict(list)
+        marker_column_counts: dict[str, int] = {}
+        pending_frame_count = 0
+
+        def flush_pending() -> None:
+            nonlocal pending_frame_count
+            if csv_folder_path is None or not pending_samples:
+                return
+
+            batched_marker_sets = [
+                MarkerSetBatch(name=name, samples=samples)
+                for name, samples in pending_samples.items()
+            ]
+            self.save_marker_sets_to_csv(
+                batched_marker_sets,
+                csv_folder_path,
+                marker_column_counts,
+            )
+            pending_samples.clear()
+            pending_frame_count = 0
+
         def handle_frame(frame: dict) -> None:
+            nonlocal pending_frame_count
             marker_sets = self.parse_frame(frame)
             if marker_sets:
-                self.print_marker_sets(marker_sets)
+                if print_enabled:
+                    self.print_marker_sets(marker_sets)
+                if csv_folder_path is not None:
+                    frame_timestamp = self.get_frame_timestamp(frame)
+                    for marker_set in marker_sets:
+                        marker_count = len(marker_set.positions)
+                        existing_marker_count = marker_column_counts.get(marker_set.name)
+                        if existing_marker_count is None:
+                            marker_column_counts[marker_set.name] = marker_count
+                        elif marker_count > existing_marker_count:
+                            raise ValueError(
+                                f"Marker count increased for '{marker_set.name}' from {existing_marker_count} to {marker_count}"
+                            )
 
-        run_natnet_stream(self.config, frame_listener=handle_frame)
+                        pending_samples[marker_set.name].append(
+                            MarkerSetSample(
+                                timestamp=frame_timestamp,
+                                positions=list(marker_set.positions),
+                            )
+                        )
+
+                    pending_frame_count += 1
+                    if pending_frame_count >= csv_batch_frames:
+                        flush_pending()
+
+        try:
+            run_natnet_stream(self.config, frame_listener=handle_frame)
+        finally:
+            flush_pending()
 
 
 if __name__ == "__main__":
-    MarkerSetReceiver(config=NatNetConfig()).stream()
+    MarkerSetReceiver(config=NatNetConfig()).stream(print_enabled=False, csv_folder_path=Path("output") / "marker_sets")
