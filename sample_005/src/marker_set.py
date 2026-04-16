@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass
 from collections import defaultdict
+import csv
 import time
 
 from src.natnet_stream import NatNetConfig, run_natnet_stream
@@ -10,17 +11,10 @@ from src.natnet_stream import NatNetConfig, run_natnet_stream
 Vector3 = tuple[float, float, float]
 
 
-# from NatNet mocap data, representing a single marker set in a single frame
 @dataclass(frozen=True)
-class MarkerSetFrame:
-    name: str
-    positions: list[Vector3]
-
-
-# representing a single marker set sample, used for CSV output
-@dataclass(frozen=True)
-class MarkerSetSample:
-    timestamp: float
+class MarkerSample:
+    wallclock_timestamp: float
+    motive_timestamp: Optional[float]
     positions: list[Vector3]
 
 
@@ -29,92 +23,76 @@ class MarkerSetReceiver:
         self.config = config
 
     @staticmethod
-    def parse_frame(frame: dict) -> list[MarkerSetFrame]:
+    def _normalize_name(raw_name: object) -> str:
+        if isinstance(raw_name, bytes):
+            return raw_name.decode("utf-8", errors="replace")
+        return str(raw_name) if raw_name else "(no-name)"
 
-        def _normalize_name(raw_name: object) -> str:
-            if isinstance(raw_name, bytes):
-                return raw_name.decode("utf-8", errors="replace")
-            if raw_name:
-                return str(raw_name)
-            return "(no-name)"
-        
+    @staticmethod
+    def parse_frame(frame: dict) -> list[tuple[str, list[Vector3]]]:
         mocap_data = frame.get("mocap_data")
         if mocap_data is None or mocap_data.marker_set_data is None:
             return []
 
         marker_sets = []
         for marker_set in mocap_data.marker_set_data.marker_data_list:
-            positions = [tuple(position) for position in marker_set.marker_pos_list]
+            positions = [tuple(pos) for pos in marker_set.marker_pos_list]
             marker_sets.append(
-                MarkerSetFrame(
-                    name=_normalize_name(marker_set.model_name),
-                    positions=positions,
-                )
+                (MarkerSetReceiver._normalize_name(marker_set.model_name), positions)
             )
         return marker_sets
 
     @staticmethod
-    def print_marker_sets(marker_sets: list[MarkerSetFrame]) -> None:
-        for marker_set in marker_sets:
-            print(f"set={marker_set.name} count={len(marker_set.positions)}")
-            for index, position in enumerate(marker_set.positions):
-                print(
-                    f"  idx={index} "
-                    f"pos=({position[0]:.3f}, {position[1]:.3f}, {position[2]:.3f})"
-                )
+    def print_marker_sets(marker_sets: list[tuple[str, list[Vector3]]]) -> None:
+        for name, positions in marker_sets:
+            print(f"set={name} count={len(positions)}")
+            for i, (x, y, z) in enumerate(positions):
+                print(f"  idx={i} pos=({x:.3f}, {y:.3f}, {z:.3f})")
 
     @staticmethod
-    def get_frame_timestamp(frame: dict) -> float:
-        frame_timestamp = frame.get("timestamp")
-        if isinstance(frame_timestamp, (int, float)) and frame_timestamp >= 0:
-            return float(frame_timestamp)
-
-        mocap_data = frame.get("mocap_data")
-        if mocap_data is not None and mocap_data.suffix_data is not None:
-            suffix_timestamp = mocap_data.suffix_data.timestamp
-            if isinstance(suffix_timestamp, (int, float)) and suffix_timestamp >= 0:
-                return float(suffix_timestamp)
-
+    def get_wallclock_timestamp(frame: dict) -> float:
+        received_time_ns = frame.get("received_time_ns")
+        if isinstance(received_time_ns, int) and received_time_ns >= 0:
+            return received_time_ns / 1_000_000_000.0
         return time.time()
 
     @staticmethod
-    def save_marker_sets_to_csv(
-        marker_sets_by_name: dict[str, list[MarkerSetSample]],
-        folder_path: Path,
-        marker_column_counts: dict[str, int],
-    ) -> None:
-        for marker_set_name, samples in marker_sets_by_name.items():
-            csv_file = folder_path / f"{marker_set_name}.csv"
-            file_exists = csv_file.exists()
-            marker_count = marker_column_counts[marker_set_name]
+    def get_motive_timestamp(frame: dict) -> Optional[float]:
+        timestamp = frame.get("timestamp")
+        if isinstance(timestamp, (int, float)) and timestamp >= 0:
+            return float(timestamp)
+        return None
 
-            with csv_file.open("a") as f:
-                if not file_exists:
-                    header = ["timestamp"]
-                    for marker_index in range(marker_count):
-                        header.extend(
-                            [
-                                f"{marker_index}_x",
-                                f"{marker_index}_y",
-                                f"{marker_index}_z",
-                            ]
-                        )
-                    f.write(",".join(header) + "\n")
+    @staticmethod
+    def create_csv(path: Path, marker_count: int) -> None:
+        header = ["wallclock_timestamp", "motive_timestamp"]
+        for i in range(marker_count):
+            header += [f"{i}_x", f"{i}_y", f"{i}_z"]
 
-                for sample in samples:
-                    if len(sample.positions) > marker_count:
-                        raise ValueError(
-                            f"Marker count increased for '{marker_set_name}' from {marker_count} to {len(sample.positions)}"
-                        )
+        with path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
 
-                    row = [str(sample.timestamp)]
-                    for position in sample.positions:
-                        row.extend([str(position[0]), str(position[1]), str(position[2])])
+    @staticmethod
+    def append_samples(path: Path, samples: list[MarkerSample], marker_count: int) -> None:
+        with path.open("a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
 
-                    missing_marker_count = marker_count - len(sample.positions)
-                    row.extend([""] * (missing_marker_count * 3))
-                    f.write(",".join(row) + "\n")
+            for sample in samples:
+                if len(sample.positions) > marker_count:
+                    raise ValueError(
+                        f"Marker count increased from {marker_count} to {len(sample.positions)}"
+                    )
 
+                row = [sample.wallclock_timestamp, sample.motive_timestamp]
+
+                for x, y, z in sample.positions:
+                    row += [x, y, z]
+
+                missing = marker_count - len(sample.positions)
+                row += [""] * (missing * 3)
+
+                writer.writerow(row)
 
     def stream(
             self,
@@ -122,55 +100,68 @@ class MarkerSetReceiver:
             csv_folder_path: Optional[Path] = None,
             csv_batch_frames: int = 30,
             ) -> None:
-
+        
         if csv_folder_path is not None:
             csv_folder_path.mkdir(parents=True, exist_ok=True)
 
-        pending_samples: dict[str, list[MarkerSetSample]] = defaultdict(list)
-        marker_column_counts: dict[str, int] = {}
+        marker_counts: dict[str, int] = {}
+        pending_samples: dict[str, list[MarkerSample]] = defaultdict(list)
         pending_frame_count = 0
 
         def flush_pending() -> None:
             nonlocal pending_frame_count
-            if csv_folder_path is None or not pending_samples:
+            if csv_folder_path is None:
                 return
 
-            self.save_marker_sets_to_csv(
-                pending_samples,
-                csv_folder_path,
-                marker_column_counts,
-            )
+            for name, samples in pending_samples.items():
+                if samples:
+                    csv_path = csv_folder_path / f"{name}.csv"
+                    self.append_samples(csv_path, samples, marker_counts[name])
+
             pending_samples.clear()
             pending_frame_count = 0
 
         def handle_frame(frame: dict) -> None:
             nonlocal pending_frame_count
+
             marker_sets = self.parse_frame(frame)
-            if marker_sets:
-                if print_enabled:
-                    self.print_marker_sets(marker_sets)
-                if csv_folder_path is not None:
-                    frame_timestamp = self.get_frame_timestamp(frame)
-                    for marker_set in marker_sets:
-                        marker_count = len(marker_set.positions)
-                        existing_marker_count = marker_column_counts.get(marker_set.name)
-                        if existing_marker_count is None:
-                            marker_column_counts[marker_set.name] = marker_count
-                        elif marker_count > existing_marker_count:
-                            raise ValueError(
-                                f"Marker count increased for '{marker_set.name}' from {existing_marker_count} to {marker_count}"
-                            )
+            if not marker_sets:
+                return
 
-                        pending_samples[marker_set.name].append(
-                            MarkerSetSample(
-                                timestamp=frame_timestamp,
-                                positions=list(marker_set.positions),
-                            )
-                        )
+            if print_enabled:
+                self.print_marker_sets(marker_sets)
 
-                    pending_frame_count += 1
-                    if pending_frame_count >= csv_batch_frames:
-                        flush_pending()
+            if csv_folder_path is None:
+                return
+
+            wallclock = self.get_wallclock_timestamp(frame)
+            motive = self.get_motive_timestamp(frame)
+
+            for name, positions in marker_sets:
+                count = len(positions)
+
+                if name not in marker_counts:
+                    marker_counts[name] = count
+                    csv_path = csv_folder_path / f"{name}.csv"
+                    self.create_csv(csv_path, count)
+
+                elif count > marker_counts[name]:
+                    raise ValueError(
+                        f"Marker count increased for '{name}' "
+                        f"from {marker_counts[name]} to {count}"
+                    )
+
+                pending_samples[name].append(
+                    MarkerSample(
+                        wallclock_timestamp=wallclock,
+                        motive_timestamp=motive,
+                        positions=positions,
+                    )
+                )
+
+            pending_frame_count += 1
+            if pending_frame_count >= csv_batch_frames:
+                flush_pending()
 
         try:
             run_natnet_stream(self.config, frame_listener=handle_frame)
@@ -179,4 +170,7 @@ class MarkerSetReceiver:
 
 
 if __name__ == "__main__":
-    MarkerSetReceiver(config=NatNetConfig()).stream(print_enabled=False, csv_folder_path=Path("output") / "marker_sets")
+    MarkerSetReceiver(NatNetConfig()).stream(
+        print_enabled=True,
+        csv_folder_path=Path("output") / "marker_sets",
+    )
