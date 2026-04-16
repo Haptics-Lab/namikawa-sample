@@ -1,7 +1,7 @@
+from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-from dataclasses import dataclass
-from collections import defaultdict
 import csv
 import time
 
@@ -33,7 +33,7 @@ class MarkerSetReceiver:
     def _normalize_name(raw_name: object) -> str:
         if isinstance(raw_name, bytes):
             return raw_name.decode("utf-8", errors="replace")
-        return str(raw_name) if raw_name else "(no-name)"
+        return str(raw_name) if raw_name else ""
 
     @classmethod
     def parse_frame(cls, frame: dict) -> list[tuple[str, list[Vector3]]]:

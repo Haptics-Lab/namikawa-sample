@@ -28,7 +28,10 @@ def stream_skeletons(config: NatNetConfig) -> None:
     '''
     Streams skeleton data from the NatNet server.
     '''
-    SkeletonReceiver(config=config).stream()
+    SkeletonReceiver(config=config).stream(
+        print_enabled=False,
+        csv_folder_path=Path("output") / "skeletons",
+    )
 
 
 def main():

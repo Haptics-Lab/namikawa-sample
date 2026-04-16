@@ -187,11 +187,11 @@ class SkeletonReceiver:
                 writer.writerow(row)
 
     def stream(
-        self,
-        print_enabled: bool = True,
-        csv_folder_path: Optional[Path] = None,
-        csv_batch_frames: int = 30,
-    ) -> None:
+            self,
+            print_enabled: bool = False,
+            csv_folder_path: Optional[Path] = None,
+            csv_batch_frames: int = 30,
+            ) -> None:
         if csv_folder_path is not None:
             csv_folder_path.mkdir(parents=True, exist_ok=True)
 

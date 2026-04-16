@@ -69,12 +69,13 @@ class RigidBodyReceiver:
         )
 
     @staticmethod
-    def print_rigid_body(rigid_body: RigidBodyFrame) -> None:
-        print(
-            f"id={rigid_body.rigid_body_id} "
-            f"pos=({rigid_body.position[0]:.3f}, {rigid_body.position[1]:.3f}, {rigid_body.position[2]:.3f}) "
-            f"rot=({rigid_body.rotation[0]:.3f}, {rigid_body.rotation[1]:.3f}, {rigid_body.rotation[2]:.3f}, {rigid_body.rotation[3]:.3f})"
-        )
+    def print_rigid_bodies(rigid_bodies: list[RigidBodyFrame]) -> None:
+        for rigid_body in rigid_bodies:
+            print(
+                f"id={rigid_body.rigid_body_id} "
+                f"pos=({rigid_body.position[0]:.3f}, {rigid_body.position[1]:.3f}, {rigid_body.position[2]:.3f}) "
+                f"rot=({rigid_body.rotation[0]:.3f}, {rigid_body.rotation[1]:.3f}, {rigid_body.rotation[2]:.3f}, {rigid_body.rotation[3]:.3f})"
+            )
 
     @classmethod
     def parse_frame(cls, frame: dict) -> list[RigidBodyFrame]:
@@ -146,7 +147,7 @@ class RigidBodyReceiver:
 
     def stream(
             self,
-            print_enabled: bool = True,
+            print_enabled: bool = False,
             csv_folder_path: Optional[Path] = None,
             csv_batch_frames: int = 30,
             ) -> None:
@@ -180,8 +181,7 @@ class RigidBodyReceiver:
                 return
 
             if print_enabled:
-                for rigid_body in rigid_bodies:
-                    self.print_rigid_body(rigid_body)
+                self.print_rigid_bodies(rigid_bodies)
 
             if csv_folder_path is None:
                 return
@@ -203,7 +203,7 @@ class RigidBodyReceiver:
                     csv_paths_by_id[rigid_body_id] = csv_path
 
                     display_name = rigid_body_names_by_id.get(rigid_body_id, f"id={rigid_body_id}")
-                    print(f"Started streaming rigid body {display_name}.")
+                    print(f"Started streaming data with Motive rigid body '{display_name}'. Ctrl+C to stop.")
                     print(f"    Writing to {csv_path}")
 
                 pending_samples[rigid_body_id].append(
