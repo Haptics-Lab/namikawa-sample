@@ -1913,15 +1913,16 @@ class NatNetClient:
         self.__nat_net_stream_version_server[3] = nnsvs[3]
         if (self.__nat_net_requested_version[0] == 0) and\
            (self.__nat_net_requested_version[1] == 0):
-            print("resetting requested version to %d %d %d %d from %d %d %d %d" % ( #type: ignore  # noqa E501
-                self.__nat_net_stream_version_server[0],
-                self.__nat_net_stream_version_server[1],
-                self.__nat_net_stream_version_server[2],
-                self.__nat_net_stream_version_server[3],
-                self.__nat_net_requested_version[0],
-                self.__nat_net_requested_version[1],
-                self.__nat_net_requested_version[2],
-                self.__nat_net_requested_version[3]))
+            if self.print_level > 0:
+                print("resetting requested version to %d %d %d %d from %d %d %d %d" % ( #type: ignore  # noqa E501
+                    self.__nat_net_stream_version_server[0],
+                    self.__nat_net_stream_version_server[1],
+                    self.__nat_net_stream_version_server[2],
+                    self.__nat_net_stream_version_server[3],
+                    self.__nat_net_requested_version[0],
+                    self.__nat_net_requested_version[1],
+                    self.__nat_net_requested_version[2],
+                    self.__nat_net_requested_version[3]))
 
             self.__nat_net_requested_version[0] = self.__nat_net_stream_version_server[0] #type: ignore  # noqa E501
             self.__nat_net_requested_version[1] = self.__nat_net_stream_version_server[1] #type: ignore  # noqa E501
@@ -2180,11 +2181,12 @@ class NatNetClient:
             packet_size = len(command_str) + 1
         elif command == self.NAT_CONNECT:
             tmp_version = [4, 2, 0, 0]
-            print("NAT_CONNECT to Motive with %d %d %d %d\n" % (
-                tmp_version[0],
-                tmp_version[1],
-                tmp_version[2],
-                tmp_version[3]))
+            if self.print_level > 0:
+                print("NAT_CONNECT to Motive with %d %d %d %d\n" % (
+                    tmp_version[0],
+                    tmp_version[1],
+                    tmp_version[2],
+                    tmp_version[3]))
 
             # allocate a byte array for 270 bytes
             # to connect with a specific version
@@ -2282,7 +2284,8 @@ class NatNetClient:
         self.data_thread = Thread(target=self.__data_thread_function, args=(self.data_socket, lambda: self.stop_threads, lambda: self.print_level,)) #type: ignore  # noqa E501
         self.command_thread = Thread(target=self.__command_thread_function, args=(self.command_socket, lambda: self.stop_threads, lambda: self.print_level, thread_option,)) #type: ignore  # noqa E501
         if thread_option == 'd':
-            print("starting data thread")
+            if self.print_level > 0:
+                print("starting data thread")
             self.command_thread.start()
             if self.command_thread.is_alive():
                 self.data_thread.start()

@@ -36,10 +36,12 @@ class MarkerSetReceiver:
 
         marker_sets = []
         for marker_set in mocap_data.marker_set_data.marker_data_list:
+            name = MarkerSetReceiver._normalize_name(marker_set.model_name)
+            if name == "all":
+                continue
+
             positions = [tuple(pos) for pos in marker_set.marker_pos_list]
-            marker_sets.append(
-                (MarkerSetReceiver._normalize_name(marker_set.model_name), positions)
-            )
+            marker_sets.append((name, positions))
         return marker_sets
 
     @staticmethod
@@ -144,6 +146,8 @@ class MarkerSetReceiver:
                     marker_counts[name] = count
                     csv_path = csv_folder_path / f"{name}.csv"
                     self.create_csv(csv_path, count)
+                    print(f"Started streaming data with Motive marker set '{name}'. Ctrl+C to stop.")
+                    print(f"    Writing to {csv_path}")
 
                 elif count > marker_counts[name]:
                     raise ValueError(
@@ -171,6 +175,6 @@ class MarkerSetReceiver:
 
 if __name__ == "__main__":
     MarkerSetReceiver(NatNetConfig()).stream(
-        print_enabled=True,
+        print_enabled=False,
         csv_folder_path=Path("output") / "marker_sets",
     )
