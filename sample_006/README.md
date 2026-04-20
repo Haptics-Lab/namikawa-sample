@@ -6,7 +6,7 @@ NI DAQ、マイク、カメラ（MocapForAll）、Motive（NatNet）を同時に
 - **MocapForAll Cameras** : 複数カメラで録画し、MP4ファイルに保存（sample_004 ベース）
 - **Motive** : marker set および rigid body のデータをCSVに保存（sample_005 ベース）
 
-各センサのworderは別スレッドで動作し、`stop_event` によって一斉停止します。
+各センサのworkerは別スレッドで動作し、`stop_event` によって一斉停止します。
 
 ## ディレクトリ構成
 ```
