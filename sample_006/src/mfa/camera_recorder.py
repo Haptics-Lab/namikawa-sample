@@ -53,7 +53,7 @@ class CameraRecorder:
         timestamp_path = output_path.with_name(f"{output_path.stem}_timestamps.csv")
         self.timestamp_file = timestamp_path.open("w", newline="", encoding="utf-8")
         self.timestamp_writer = csv.writer(self.timestamp_file)
-        self.timestamp_writer.writerow(["frame_index", "wallclock_timestamp_ns", "perf_counter_ns"])
+        self.timestamp_writer.writerow(["Frame Index", "Wall Clock [s]", "Perf Counter [ns]"])
         self.frame_index = 0
 
     def write_one_frame(self) -> bool:
@@ -64,11 +64,12 @@ class CameraRecorder:
         if not ret:
             return False
 
-        wallclock_timestamp_ns = time.time_ns()
-        perf_counter_ns = time.perf_counter_ns()
+        wallclock_ns = time.time_ns()
+        wallclock = wallclock_ns / 1e9
+        perf_counter = time.perf_counter_ns()
 
         self.writer.write(frame)
-        self.timestamp_writer.writerow([self.frame_index, wallclock_timestamp_ns, perf_counter_ns])
+        self.timestamp_writer.writerow([self.frame_index, wallclock, perf_counter])
         self.frame_index += 1
         return True
 
@@ -148,4 +149,4 @@ if __name__ == "__main__":
         CameraConfig(device=3, width=640, height=480, fps=30),
     ])
 
-    multi_camera_recorder.record(output_folder=Path("output") / "test")
+    multi_camera_recorder.record(output_folder=Path("output") / "test" / "mfa")

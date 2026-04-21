@@ -287,5 +287,5 @@ if __name__ == "__main__":
     
     MarkerSetReceiver(config=natnet_config).stream(
         print_enabled=False,
-        csv_folder_path=Path("output") / "test" / "marker_sets",
+        csv_folder_path=Path("output") / "test" / "motive" / "marker_sets",
     )

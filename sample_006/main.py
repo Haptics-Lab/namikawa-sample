@@ -89,7 +89,7 @@ def main():
         (
             "MocapForAll Cameras",
             lambda: multi_camera_recorder.record(
-                output_folder=raw_data_folder,
+                output_folder=raw_data_folder / "mfa",
                 stop_event=stop_event,
             ),
         ),

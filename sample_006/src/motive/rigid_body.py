@@ -251,5 +251,5 @@ if __name__ == "__main__":
     
     RigidBodyReceiver(config=natnet_config).stream(
         print_enabled=False,
-        csv_folder_path=Path("output") / "test" / "rigid_bodies",
+        csv_folder_path=Path("output") / "test" / "motive" / "rigid_bodies",
     )
