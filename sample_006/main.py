@@ -82,7 +82,7 @@ def main():
         (
             "Audio",
             lambda: audio_recorder.record(
-                audio_path=raw_data_folder / "audio_data.wav",
+                wav_path=raw_data_folder / "audio_data.wav",
                 stop_event=stop_event,
             ),
         ),
