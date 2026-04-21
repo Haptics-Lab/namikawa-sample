@@ -2,6 +2,7 @@ import csv
 import threading
 from pathlib import Path
 from dataclasses import dataclass
+import time
 
 import numpy as np
 import nidaqmx
@@ -75,7 +76,12 @@ class NIADC:
 
             writer = csv.writer(f)
             # Write header row
-            header = ["Sample Index", "DAQ Time [s]"] + task.channel_names
+            header = [
+                "Sample Index",
+                "DAQ Time [s]",
+                "Wall Clock [s]",
+                "Perf Counter [ns]",
+            ] + task.channel_names
             writer.writerow(header)
 
             sample_idx = 0
@@ -91,12 +97,19 @@ class NIADC:
 						number_of_samples_per_channel=self.samples_per_read,
 						timeout=max(10.0, expected_block_sec * 5),
 					)
+                    received_time_ns = time.time_ns()
+                    received_perf_counter_ns = time.perf_counter_ns()
 
                     data_arr = np.atleast_2d(np.asarray(data, dtype=float)).T
 
                     for i in range(data_arr.shape[0]):
                         daq_time = sample_idx / self.sampling_rate
-                        row = [sample_idx, f"{daq_time:.6f}"] + data_arr[i].tolist()
+                        row = [
+                            sample_idx,
+                            f"{daq_time:.6f}",
+                            received_time_ns / 1_000_000_000.0,
+                            received_perf_counter_ns,
+                        ] + data_arr[i].tolist()
                         writer.writerow(row)
                         sample_idx += 1
 
@@ -126,4 +139,4 @@ if __name__ == "__main__":
         channel_configs=channel_configs
     )
 
-    adc.stream_to_csv(Path("..") / "data" / "test" / "ni_data.csv")
+    adc.stream_to_csv(Path("output") / "test" / "ni_data.csv")

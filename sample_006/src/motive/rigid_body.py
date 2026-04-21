@@ -23,6 +23,7 @@ class RigidBodyFrame:
 @dataclass(frozen=True)
 class RigidBodySample:
     wallclock_timestamp: float
+    perf_timestamp: int
     motive_timestamp: Optional[float]
     position: Vector3
     rotation: Quaternion
@@ -98,25 +99,32 @@ class RigidBodyReceiver:
         return rigid_bodies
 
     @staticmethod
-    def _get_timestamps(frame: dict) -> tuple[float, Optional[float]]:
+    def _get_timestamps(frame: dict) -> tuple[float, int, Optional[float]]:
         received_time_ns = frame.get("received_time_ns")
+        received_perf_counter_ns = frame.get("received_perf_counter_ns")
         wallclock = (
             received_time_ns / 1_000_000_000.0
             if isinstance(received_time_ns, int) and received_time_ns >= 0
             else time.time()
         )
+        perf = (
+            received_perf_counter_ns
+            if isinstance(received_perf_counter_ns, int) and received_perf_counter_ns >= 0
+            else time.perf_counter_ns()
+        )
 
         timestamp = frame.get("timestamp")
         motive = float(timestamp) if isinstance(timestamp, (int, float)) and timestamp >= 0 else None
-        return wallclock, motive
+        return wallclock, perf, motive
 
     @staticmethod
     def create_csv(path: Path) -> None:
         with path.open("w", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(
                 [
-                    "wallclock_timestamp",
-                    "motive_timestamp",
+                    "Motive Time",
+                    "Wall Clock [s]",
+                    "Perf Counter [ns]",
                     "x",
                     "y",
                     "z",
@@ -134,8 +142,9 @@ class RigidBodyReceiver:
             for sample in samples:
                 writer.writerow(
                     [
-                        sample.wallclock_timestamp,
                         sample.motive_timestamp,
+                        sample.wallclock_timestamp,
+                        sample.perf_timestamp,
                         sample.position[0],
                         sample.position[1],
                         sample.position[2],
@@ -189,7 +198,7 @@ class RigidBodyReceiver:
                 return
 
             rigid_body_names_by_id.update(self.get_rigid_body_names(frame))
-            wallclock, motive = self._get_timestamps(frame)
+            wallclock, perf_timestamp, motive = self._get_timestamps(frame)
             for rigid_body in rigid_bodies:
                 rigid_body_id = rigid_body.rigid_body_id
                 if rigid_body_id not in csv_paths_by_id:
@@ -211,6 +220,7 @@ class RigidBodyReceiver:
                 pending_samples[rigid_body_id].append(
                     RigidBodySample(
                         wallclock_timestamp=wallclock,
+                        perf_timestamp=perf_timestamp,
                         motive_timestamp=motive,
                         position=rigid_body.position,
                         rotation=rigid_body.rotation,
@@ -232,7 +242,14 @@ class RigidBodyReceiver:
 
 
 if __name__ == "__main__":
-    RigidBodyReceiver(config=NatNetConfig()).stream(
+
+    natnet_config = NatNetConfig(
+        client_ip="127.0.0.1",
+        server_ip="127.0.0.1",
+        use_multicast=False,
+    )
+    
+    RigidBodyReceiver(config=natnet_config).stream(
         print_enabled=False,
-        csv_folder_path=Path("..") / "data" / "test" / "rigid_bodies",
+        csv_folder_path=Path("output") / "test" / "rigid_bodies",
     )

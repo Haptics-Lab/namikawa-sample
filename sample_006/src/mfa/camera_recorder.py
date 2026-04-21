@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from pathlib import Path
 import threading
+import csv
+import time
 
 import cv2
 
@@ -19,6 +21,9 @@ class CameraRecorder:
         self.config = config
         self.cap = None
         self.writer = None
+        self.timestamp_file = None
+        self.timestamp_writer = None
+        self.frame_index = 0
 
     def open(self, output_path: Path):
         self.output_path = output_path
@@ -45,15 +50,26 @@ class CameraRecorder:
             self.close()
             raise RuntimeError(f"Could not open video writer: {output_path}")
 
+        timestamp_path = output_path.with_name(f"{output_path.stem}_timestamps.csv")
+        self.timestamp_file = timestamp_path.open("w", newline="", encoding="utf-8")
+        self.timestamp_writer = csv.writer(self.timestamp_file)
+        self.timestamp_writer.writerow(["frame_index", "wallclock_timestamp_ns", "perf_counter_ns"])
+        self.frame_index = 0
+
     def write_one_frame(self) -> bool:
-        if self.cap is None or self.writer is None:
+        if self.cap is None or self.writer is None or self.timestamp_writer is None:
             raise RuntimeError("Camera is not opened.")
 
         ret, frame = self.cap.read()
         if not ret:
             return False
 
+        wallclock_timestamp_ns = time.time_ns()
+        perf_counter_ns = time.perf_counter_ns()
+
         self.writer.write(frame)
+        self.timestamp_writer.writerow([self.frame_index, wallclock_timestamp_ns, perf_counter_ns])
+        self.frame_index += 1
         return True
 
     def close(self):
@@ -64,6 +80,11 @@ class CameraRecorder:
         if self.writer is not None:
             self.writer.release()
             self.writer = None
+
+        if self.timestamp_file is not None:
+            self.timestamp_file.close()
+            self.timestamp_file = None
+            self.timestamp_writer = None
 
     @staticmethod
     def check_device(max_devices: int = 10):
@@ -98,6 +119,10 @@ class MultiCameraRecorder:
             print("Started recording video. Ctrl+C to stop.")
             for recorder in recorders:
                 print(f"    Camera {recorder.config.device} -> {recorder.output_path}")
+                print(
+                    f"    Camera {recorder.config.device} timestamps -> "
+                    f"{recorder.output_path.with_name(f'{recorder.output_path.stem}_timestamps.csv')}"
+                )
 
             while not should_stop():
                 for recorder in recorders:
@@ -117,13 +142,10 @@ if __name__ == "__main__":
     
     CameraRecorder.check_device(max_devices=5)
 
-    configs = [
-        CameraConfig(device=0),
-        CameraConfig(device=1),
-        CameraConfig(device=2),
-        CameraConfig(device=3),
-    ]
+    multi_camera_recorder = MultiCameraRecorder(configs=[
+        CameraConfig(device=0, width=640, height=480, fps=30),
+        CameraConfig(device=2, width=640, height=480, fps=30),
+        CameraConfig(device=3, width=640, height=480, fps=30),
+    ])
 
-    multi_camera_recorder = MultiCameraRecorder(configs=configs)
-
-    multi_camera_recorder.record(output_folder=Path("..") / "data" / "test")
+    multi_camera_recorder.record(output_folder=Path("output") / "test")

@@ -14,7 +14,7 @@ def main():
 
     # === Config ===
     # folder for raw data (CSV, WAV, etc.)
-    raw_data_folder = Path("output") / "raw_data" / "test01" / "trial01"
+    raw_data_folder = Path("output") / "participant01" / "trial01"
 
     # NI DAQ
     channel_configs = [

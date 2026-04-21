@@ -61,5 +61,5 @@ if __name__ == "__main__":
     
     AudioRecorder.check_device()
 
-    recorder = AudioRecorder(device=1, sample_rate=44100, channels=2, blocksize=1024)
-    recorder.record(Path("..") / "data" / "test" / "audio_data.wav")
+    audio_recorder = AudioRecorder(device=2, sample_rate=44100, channels=2, blocksize=1024)
+    audio_recorder.record(Path("output") / "test" / "audio_data.wav")

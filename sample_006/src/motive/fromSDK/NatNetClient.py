@@ -1006,7 +1006,7 @@ class NatNetClient:
         return offset, frame_suffix_data
 
     # Unpack data from a motion capture frame message
-    def __unpack_mocap_data(self, data: bytes, packet_size, major, minor, packet_received_time_ns=None):
+    def __unpack_mocap_data(self, data: bytes, packet_size, major, minor, packet_received_time_ns=None, packet_received_perf_counter_ns=None):
         mocap_data = MoCapData.MoCapData()
         data = memoryview(data)
         offset = 0
@@ -1093,6 +1093,7 @@ class NatNetClient:
             data_dict["timecode_sub"] = timecode_sub
             data_dict["timestamp"] = timestamp
             data_dict["received_time_ns"] = packet_received_time_ns
+            data_dict["received_perf_counter_ns"] = packet_received_perf_counter_ns
             data_dict["is_recording"] = is_recording
             data_dict["tracked_models_changed"] = tracked_models_changed
             data_dict["data_descriptions"] = self.data_descriptions
@@ -1112,6 +1113,7 @@ class NatNetClient:
             data_dict["timecode_sub"] = timecode_sub
             data_dict["timestamp"] = timestamp
             data_dict["received_time_ns"] = packet_received_time_ns
+            data_dict["received_perf_counter_ns"] = packet_received_perf_counter_ns
             data_dict["is_recording"] = is_recording
             data_dict["tracked_models_changed"] = tracked_models_changed
             data_dict["offset"] = offset
@@ -1963,6 +1965,7 @@ class NatNetClient:
     def __command_thread_function(self, in_socket, stop, gprint_level, thread_option): #type: ignore  # noqa E501
         message_id_dict = {}
         packet_received_time_ns = None
+        packet_received_perf_counter_ns = None
         if not self.use_multicast:
             in_socket.settimeout(2.0)
         data = bytearray(0) #type: ignore  # noqa F841
@@ -1977,6 +1980,7 @@ class NatNetClient:
             try:
                 buffer_list[buffer_list_recv_index], addr = in_socket.recvfrom(recv_buffer_size) #type: ignore  # noqa E501
                 packet_received_time_ns = time.time_ns()
+                packet_received_perf_counter_ns = time.perf_counter_ns()
                 buffer_list_in_use_index = buffer_list_recv_index
                 buffer_list_recv_index = (buffer_list_recv_index + 1) % buffer_list_size #type: ignore  # noqa E501
             except socket.error as msg: #type: ignore  # noqa F841
@@ -2013,9 +2017,11 @@ class NatNetClient:
                     buffer_list[buffer_list_in_use_index],
                     print_level,
                     packet_received_time_ns,
+                    packet_received_perf_counter_ns,
                 ) #type: ignore  # noqa E501
                 buffer_list[buffer_list_in_use_index] = bytearray(0)
                 packet_received_time_ns = None
+                packet_received_perf_counter_ns = None
 
             if not self.use_multicast:
                 if not stop():
@@ -2029,6 +2035,7 @@ class NatNetClient:
         message_id_dict = {}
         data = bytearray(0)
         packet_received_time_ns = None
+        packet_received_perf_counter_ns = None
         # 64k buffer size
         recv_buffer_size = 128*1024
         while not stop():
@@ -2036,6 +2043,7 @@ class NatNetClient:
             try:
                 data, addr = in_socket.recvfrom(recv_buffer_size)
                 packet_received_time_ns = time.time_ns()
+                packet_received_perf_counter_ns = time.perf_counter_ns()
             except socket.error as msg:
                 if not stop():
                     print("ERROR: data socket access error occurred:\n  %s" % msg) #type: ignore  # noqa E501
@@ -2064,13 +2072,14 @@ class NatNetClient:
                             print_level = 1
                         else:
                             print_level = 0
-                message_id = self.__process_message(data, print_level, packet_received_time_ns)
+                message_id = self.__process_message(data, print_level, packet_received_time_ns, packet_received_perf_counter_ns)
                 data = bytearray(0)
                 packet_received_time_ns = None
+                packet_received_perf_counter_ns = None
 
         return 0
 
-    def __process_message(self, data: bytes, print_level=0, packet_received_time_ns=None):
+    def __process_message(self, data: bytes, print_level=0, packet_received_time_ns=None, packet_received_perf_counter_ns=None):
         # return message ID
         major = self.get_major()
         minor = self.get_minor()
@@ -2099,6 +2108,7 @@ class NatNetClient:
                 major,
                 minor,
                 packet_received_time_ns=packet_received_time_ns,
+                packet_received_perf_counter_ns=packet_received_perf_counter_ns,
             ) #type: ignore  # noqa E501
             offset += offset_tmp
             # print("MoCap Frame: %d\n" % (mocap_data.prefix_data.frame_number))

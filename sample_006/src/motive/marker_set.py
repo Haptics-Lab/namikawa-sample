@@ -15,6 +15,7 @@ Vector3 = tuple[float, float, float]
 @dataclass(frozen=True)
 class MarkerSample:
     wallclock_timestamp: float
+    perf_timestamp: int
     motive_timestamp: Optional[float]
     positions: list[Vector3]
 
@@ -103,17 +104,23 @@ class MarkerSetReceiver:
         return sorted(range(marker_count), key=lambda i: prefixes[i])
 
     @staticmethod
-    def _get_timestamps(frame: dict) -> tuple[float, Optional[float]]:
+    def _get_timestamps(frame: dict) -> tuple[float, int, Optional[float]]:
         received_time_ns = frame.get("received_time_ns")
+        received_perf_counter_ns = frame.get("received_perf_counter_ns")
         wallclock = (
             received_time_ns / 1_000_000_000.0
             if isinstance(received_time_ns, int) and received_time_ns >= 0
             else time.time()
         )
+        perf = (
+            received_perf_counter_ns
+            if isinstance(received_perf_counter_ns, int) and received_perf_counter_ns >= 0
+            else time.perf_counter_ns()
+        )
 
         timestamp = frame.get("timestamp")
         motive = float(timestamp) if isinstance(timestamp, (int, float)) and timestamp >= 0 else None
-        return wallclock, motive
+        return wallclock, perf, motive
 
     @staticmethod
     def print_marker_sets(marker_sets: list[tuple[str, list[Vector3]]]) -> None:
@@ -133,7 +140,7 @@ class MarkerSetReceiver:
         
         prefixes = cls._build_column_prefixes(marker_count, marker_labels)
 
-        header = ["wallclock_timestamp", "motive_timestamp"]
+        header = ["Motive Time", "Wall Clock [s]", "Perf Counter [ns]"]
         for idx in column_order:
             p = prefixes[idx]
             header.extend([f"{p}_x", f"{p}_y", f"{p}_z"])
@@ -158,7 +165,7 @@ class MarkerSetReceiver:
                         f"Marker count increased from {marker_count} to {len(sample.positions)}"
                     )
 
-                row = [sample.wallclock_timestamp, sample.motive_timestamp]
+                row = [sample.motive_timestamp, sample.wallclock_timestamp, sample.perf_timestamp]
                 for idx in column_order:
                     if idx < len(sample.positions):
                         row.extend(sample.positions[idx])
@@ -215,7 +222,7 @@ class MarkerSetReceiver:
                 return
 
             labels_by_set = self.get_marker_set_labels(frame)
-            wallclock, motive = self._get_timestamps(frame)
+            wallclock, perf, motive = self._get_timestamps(frame)
 
             for name, positions in marker_sets:
                 count = len(positions)
@@ -250,6 +257,7 @@ class MarkerSetReceiver:
                 pending_samples[name].append(
                     MarkerSample(
                         wallclock_timestamp=wallclock,
+                        perf_timestamp=perf,
                         motive_timestamp=motive,
                         positions=positions,
                     )
@@ -270,7 +278,14 @@ class MarkerSetReceiver:
 
 
 if __name__ == "__main__":
-    MarkerSetReceiver(NatNetConfig()).stream(
+
+    natnet_config = NatNetConfig(
+        client_ip="127.0.0.1",
+        server_ip="127.0.0.1",
+        use_multicast=False,
+    )
+    
+    MarkerSetReceiver(config=natnet_config).stream(
         print_enabled=False,
-        csv_folder_path=Path("..") / "data" / "test" / "marker_sets",
+        csv_folder_path=Path("output") / "test" / "marker_sets",
     )
