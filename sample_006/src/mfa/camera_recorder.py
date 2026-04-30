@@ -104,20 +104,17 @@ class MultiCameraRecorder:
     def record(
             self,
             output_folder: Path,
-            stop_event: threading.Event | None = None
+            stop_event: threading.Event
             ):
         
         recorders = [CameraRecorder(config) for config in self.configs]
-
-        def should_stop() -> bool:
-            return stop_event is not None and stop_event.is_set()
 
         try:
             for recorder in recorders:
                 output_path = output_folder / f"cam{recorder.config.device}.mp4"
                 recorder.open(output_path)
 
-            print("Started recording video. Ctrl+C to stop.")
+            print("Started recording mfa video.")
             for recorder in recorders:
                 print(f"    Camera {recorder.config.device} -> {recorder.output_path}")
                 print(
@@ -125,18 +122,17 @@ class MultiCameraRecorder:
                     f"{recorder.output_path.with_name(f'{recorder.output_path.stem}_timestamps.csv')}"
                 )
 
-            while not should_stop():
+            while not stop_event.is_set():
                 for recorder in recorders:
                     if not recorder.write_one_frame():
                         print(f"Failed to read frame from camera {recorder.config.device}.")
-                        return
-
-        except KeyboardInterrupt:
-            print("\nKeyboardInterrupt received. Stopping video recording...")
+                        stop_event.set()
+                        break
 
         finally:
             for recorder in recorders:
                 recorder.close()
+            print("Stopped mfa video recording.")
 
 
 if __name__ == "__main__":
@@ -149,4 +145,16 @@ if __name__ == "__main__":
         CameraConfig(device=3, width=640, height=480, fps=30),
     ])
 
-    multi_camera_recorder.record(output_folder=Path("output") / "test" / "mfa")
+    stop_event = threading.Event()
+    thread = threading.Thread(
+        target=multi_camera_recorder.record,
+        args=(Path("output") / "test" / "mfa", stop_event),
+    )
+
+    thread.start()
+
+    try:
+        input("Press Enter to stop recording...\n")
+    finally:
+        stop_event.set()
+        thread.join()

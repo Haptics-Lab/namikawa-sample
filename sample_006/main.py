@@ -121,13 +121,10 @@ def main():
         thread.start()
         threads.append(thread)
 
-    print("All recorders started. Press Ctrl+C once to stop all.")
+    print("All recorders started.")
 
     try:
-        while any(thread.is_alive() for thread in threads):
-            if stop_event.is_set():
-                break
-            time.sleep(0.2)
+        input("Press Enter to stop all recordings...\n")
     except KeyboardInterrupt:
         print("\nKeyboardInterrupt received. Stopping all recordings...")
     finally:

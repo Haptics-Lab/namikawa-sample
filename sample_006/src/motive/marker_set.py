@@ -108,7 +108,7 @@ class MarkerSetReceiver:
         received_time_ns = frame.get("received_time_ns")
         received_perf_counter_ns = frame.get("received_perf_counter_ns")
         wallclock = (
-            received_time_ns / 1_000_000_000.0
+            received_time_ns / 1e9
             if isinstance(received_time_ns, int) and received_time_ns >= 0
             else time.time()
         )
@@ -176,10 +176,10 @@ class MarkerSetReceiver:
 
     def stream(
             self,
+            stop_event: threading.Event,
             print_enabled: bool = False,
             csv_folder_path: Optional[Path] = None,
             csv_batch_frames: int = 30,
-            stop_event: threading.Event | None = None,
             ) -> None:
         
         if csv_folder_path is not None:
@@ -245,7 +245,7 @@ class MarkerSetReceiver:
                         column_order=column_order,
                     )
 
-                    print(f"Started streaming data with Motive marker set '{name}'. Ctrl+C to stop.")
+                    print(f"Started streaming data with Motive marker set '{name}'.")
                     print(f"    Writing to {csv_path}")
 
                 elif count > marker_infos[name].marker_count:
@@ -284,8 +284,23 @@ if __name__ == "__main__":
         server_ip="127.0.0.1",
         use_multicast=False,
     )
+
+    marker_set_receiver = MarkerSetReceiver(config=natnet_config)
     
-    MarkerSetReceiver(config=natnet_config).stream(
-        print_enabled=False,
-        csv_folder_path=Path("output") / "test" / "motive" / "marker_sets",
+    stop_event = threading.Event()
+    thread = threading.Thread(
+        target=marker_set_receiver.stream,
+        kwargs={
+            "print_enabled": False,
+            "csv_folder_path": Path("output") / "test" / "motive" / "marker_sets",
+            "stop_event": stop_event,
+        },
     )
+    
+    thread.start()
+
+    try:
+        input("Press Enter to stop streaming...\n")
+    finally:
+        stop_event.set()
+        thread.join()

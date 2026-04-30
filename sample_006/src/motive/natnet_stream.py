@@ -1,4 +1,3 @@
-import time
 import threading
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -21,10 +20,10 @@ FrameListener = Callable[[dict[str, Any]], None]
 
 def run_natnet_stream(
         config: NatNetConfig,
+        stop_event: threading.Event,
         *,
         rigid_body_listener: RigidBodyListener | None = None,
         frame_listener: FrameListener | None = None,
-        stop_event: threading.Event | None = None,
         ) -> None:
     client = NatNetClient()
     client.set_client_address(config.client_ip)
@@ -37,13 +36,8 @@ def run_natnet_stream(
     if not client.run(config.run_mode):
         raise RuntimeError("Failed to start NatNet client")
 
-    def should_stop() -> bool:
-        return stop_event is not None and stop_event.is_set()
-
     try:
-        while not should_stop():
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("\nKeyboardInterrupt received. Stopping NatNet stream...")
+        stop_event.wait()
     finally:
         client.shutdown()
+        print("Stopped Motive NatNet streaming.")

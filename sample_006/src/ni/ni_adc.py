@@ -47,12 +47,10 @@ class NIADC:
     def stream_to_csv(
             self,
             csv_path: Path,
-            stop_event: threading.Event | None = None,
+            stop_event: threading.Event
             ):
+        
         csv_path.parent.mkdir(parents=True, exist_ok=True)
-
-        def should_stop() -> bool:
-            return stop_event is not None and stop_event.is_set()
 
         with nidaqmx.Task() as task, csv_path.open("w", newline="", encoding="utf-8") as f:
 
@@ -88,15 +86,15 @@ class NIADC:
             expected_block_sec = self.samples_per_read / self.sampling_rate
 
             task.start()
-            print(f"Started streaming data with NI DAQ. Ctrl+C to stop.")
+            print(f"Started streaming data with NI DAQ.")
             print(f"    Writing to {csv_path}")
 
             try:
-                while not should_stop():
+                while not stop_event.is_set():
                     data = task.read(
-						number_of_samples_per_channel=self.samples_per_read,
-						timeout=max(10.0, expected_block_sec * 5),
-					)
+                        number_of_samples_per_channel=self.samples_per_read,
+                        timeout=max(10.0, expected_block_sec * 5),
+                    )
                     received_time_ns = time.time_ns()
                     received_perf_counter_ns = time.perf_counter_ns()
 
@@ -107,14 +105,13 @@ class NIADC:
                         row = [
                             sample_idx,
                             f"{daq_time:.6f}",
-                            received_time_ns / 1_000_000_000.0,
+                            received_time_ns / 1e9,
                             received_perf_counter_ns,
                         ] + data_arr[i].tolist()
                         writer.writerow(row)
                         sample_idx += 1
-
-            except KeyboardInterrupt:
-                print("\nKeyboardInterrupt received. Stopping data stream...")
+            finally:
+                print("Stopped NI data streaming.")
 
 
 if __name__ == "__main__":
@@ -139,4 +136,16 @@ if __name__ == "__main__":
         channel_configs=channel_configs
     )
 
-    adc.stream_to_csv(Path("output") / "test" / "ni_data.csv")
+    stop_event = threading.Event()
+    thread = threading.Thread(
+        target=adc.stream_to_csv,
+        args=(Path("output") / "test" / "ni_data.csv", stop_event),
+    )
+
+    thread.start()
+
+    try:
+        input("Press Enter to stop streaming...\n")
+    finally:
+        stop_event.set()
+        thread.join()

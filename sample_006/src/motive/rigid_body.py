@@ -103,7 +103,7 @@ class RigidBodyReceiver:
         received_time_ns = frame.get("received_time_ns")
         received_perf_counter_ns = frame.get("received_perf_counter_ns")
         wallclock = (
-            received_time_ns / 1_000_000_000.0
+            received_time_ns / 1e9
             if isinstance(received_time_ns, int) and received_time_ns >= 0
             else time.time()
         )
@@ -157,10 +157,10 @@ class RigidBodyReceiver:
 
     def stream(
             self,
+            stop_event: threading.Event,
             print_enabled: bool = False,
             csv_folder_path: Optional[Path] = None,
             csv_batch_frames: int = 30,
-            stop_event: threading.Event | None = None,
             ) -> None:
 
         if csv_folder_path is not None:
@@ -214,7 +214,7 @@ class RigidBodyReceiver:
                     csv_paths_by_id[rigid_body_id] = csv_path
 
                     display_name = rigid_body_names_by_id.get(rigid_body_id, f"id={rigid_body_id}")
-                    print(f"Started streaming data with Motive rigid body '{display_name}'. Ctrl+C to stop.")
+                    print(f"Started streaming data with Motive rigid body '{display_name}'.")
                     print(f"    Writing to {csv_path}")
 
                 pending_samples[rigid_body_id].append(
@@ -248,8 +248,24 @@ if __name__ == "__main__":
         server_ip="127.0.0.1",
         use_multicast=False,
     )
+
+    rigid_body_receiver = RigidBodyReceiver(config=natnet_config)
     
-    RigidBodyReceiver(config=natnet_config).stream(
-        print_enabled=False,
-        csv_folder_path=Path("output") / "test" / "motive" / "rigid_bodies",
+    stop_event = threading.Event()
+    thread = threading.Thread(
+        target=rigid_body_receiver.stream,
+        kwargs={
+            "stop_event": stop_event,
+            "print_enabled": True,
+            "csv_folder_path": Path("output") / "test" / "motive" / "rigid_bodies",
+            "csv_batch_frames": 30,
+        },
     )
+
+    thread.start()
+
+    try:
+        input("Press Enter to stop streaming...\n")
+    finally:
+        stop_event.set()
+        thread.join()

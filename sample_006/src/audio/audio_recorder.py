@@ -13,7 +13,7 @@ class AudioRecorder:
         self.channels = channels
         self.blocksize = blocksize
         
-    def record(self, wav_path: Path, stop_event: threading.Event | None = None):
+    def record(self, wav_path: Path, stop_event: threading.Event):
         
         wav_path.parent.mkdir(parents=True, exist_ok=True)
         self._frames = []
@@ -22,9 +22,6 @@ class AudioRecorder:
             if status:
                 print(status)
             self._frames.append(indata.copy())
-
-        def should_stop() -> bool:
-            return stop_event is not None and stop_event.is_set()
 
         try:
             with sd.InputStream(
@@ -36,19 +33,16 @@ class AudioRecorder:
                     device=self.device,
                 ):
 
-                print(f"Started recording audio. Ctrl+C to stop.")
+                print(f"Started recording audio.")
                 print(f"    Writing to {wav_path}")
 
-                while not should_stop():
-                    sd.sleep(500)
-
-        except KeyboardInterrupt:
-            print("\nKeyboardInterrupt received. Stopping audio recording...")
+                stop_event.wait()
         
         finally:
             if self._frames:
                 audio = np.concatenate(self._frames, axis=0)
                 write(wav_path, self.sample_rate, audio)
+                print("Stopped audio recording.")
             else:
                 print("No audio data recorded.")
 
@@ -62,4 +56,17 @@ if __name__ == "__main__":
     AudioRecorder.check_device()
 
     audio_recorder = AudioRecorder(device=2, sample_rate=44100, channels=2, blocksize=1024)
-    audio_recorder.record(Path("output") / "test" / "audio_data.wav")
+
+    stop_event = threading.Event()
+    thread = threading.Thread(
+        target=audio_recorder.record,
+        args=(Path("output") / "test" / "audio_data.wav", stop_event),
+    )
+
+    thread.start()
+
+    try:
+        input("Press Enter to stop recording...\n")
+    finally:
+        stop_event.set()
+        thread.join()
