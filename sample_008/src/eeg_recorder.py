@@ -1,21 +1,22 @@
 import threading
 from pathlib import Path
 import csv
-
-import numpy as np
+import time
 
 from src import OrbViewAPI_py313 as orb
 
 
+EEG_CHANNELS = ["Fp1", "Fz", "Fp2", "C3", "Cz", "C4", "O1", "O2", "T8", "T7", "Pz"]
+
+
 class EEGRecorder:
-    
     def __init__(self, com_port: str):
         self.com_port = com_port
-
+        self.fs = 1000
         self.oif = orb.OIF()
-        self.start_connection()
+        self.connect()
 
-    def start_connection(self):
+    def connect(self):
         self.oif.set_ch_all()
         self.oif.change_buffer_length(5000)
         self.oif.connect(self.com_port)
@@ -24,89 +25,96 @@ class EEGRecorder:
         self.oif.imp_check_start()
         print("Checking impedance...")
 
+        labels = ["Ref"] + EEG_CHANNELS
+
         try:
             while not stop_event.is_set():
                 imp_res = self.oif.imp_check()
-                print(
-                    "Ref:", imp_res[0],
-                    "F3:", imp_res[1],
-                    "Fz:", imp_res[2],
-                    "F4:", imp_res[3],
-                    "C3:", imp_res[4],
-                    "Cz:", imp_res[5],
-                    "C4:", imp_res[6],
-                    "O1:", imp_res[7],
-                    "O2:", imp_res[8],
-                    "X1:", imp_res[9],
-                    "X2:", imp_res[10],
-                    "A1:", imp_res[11],
-                )
+                print("  ".join(f"{label}: {value}" for label, value in zip(labels, imp_res)))
+
                 if stop_event.wait(1.0):
                     break
         finally:
             self.oif.imp_check_stop()
 
-    def stream_to_csv(self, csv_path: Path, stop_event: threading.Event):
+    def stream_to_csv(
+            self,
+            csv_path: Path,
+            stop_event: threading.Event,
+            started_event: threading.Event
+            ):
         csv_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
+        header = ["Sample Index", "EEG Time [s]", "Estimated Wall Clock [s]"] + EEG_CHANNELS + ["Sync Signal"]
+
         self.oif.start()
         self.oif.inst_on(5000)
+        time.sleep(5.0)
+        self.oif.orbtobuffer_interval(1000)
+        self.oif.clear_memory()
+
         print("Started EEG streaming...")
         print(f"    Writing to {csv_path}")
 
-        header = ["POINT", "F3", "Fz", "F4", "C3", "Cz", "C4", "O1", "O2", "X1", "X2", "A1", "EXT"]
+        started_event.set()
 
-        with open(csv_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(header)
-
-        self.oif.orbtobuffer_interval(1000)
-
-        clock_long = 0
-        clock_short = 0
+        sample_index = 0
+        prev_received_time_ns = None
 
         try:
-            while not stop_event.is_set():
-                res = self.oif.getfrombuffer(1000)
-                data = [self.oif.get_orbdata(i) for i in range(12)]
-                with open(csv_path, "a", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f)
-                    writer.writerow(data)
+            with open(csv_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(header)
 
-                    for i in range(len(res)):
-                        row =[clock_long + i, res[i][1], res[i][2], res[i][3], res[i][4], res[i][5], res[i][6], res[i][7], res[i][8], res[i][9], res[i][10], res[i][11], res[i][12]] 
-                        writer.writerow(row)
-                        clock_short += 1
-                    clock_long += clock_short
-                    clock_short = 0
+                while not stop_event.is_set():
+                    res = self.oif.getfrombuffer(1000)
+
+                    received_time_ns = time.time_ns()
+                    if prev_received_time_ns is None:
+                        prev_received_time_ns = received_time_ns - len(res) * 1e9 / self.fs
+                    interval_sec = (received_time_ns - prev_received_time_ns) / len(res)
+
+                    rows = [
+                        [sample_index + i, (sample_index + i)/self.fs, (prev_received_time_ns + interval_sec * (i + 1))/1e9] + list(row[1:13])
+                        for i, row in enumerate(res)
+                    ]
+
+                    writer.writerows(rows)
+                    sample_index += len(rows)
+                    prev_received_time_ns = received_time_ns
+
         finally:
             self.oif.orbtobuffer_stopinterval()
             self.oif.end()
             self.oif.disconnect()
-            del self.oif
             print("Stopped EEG streaming.")
 
 
 if __name__ == "__main__":
-    recorder = EEGRecorder(com_port="COM1")
+    recorder = EEGRecorder(com_port="COM3")
 
     stop_imp = threading.Event()
-    imp_thread = threading.Thread(target=recorder.check_impedance, args=(stop_imp,))
+    imp_thread = threading.Thread(
+        target=recorder.check_impedance,
+        args=(stop_imp,)
+    )
     imp_thread.start()
 
     input("Press Enter to stop impedance check and start recording...\n")
     stop_imp.set()
     imp_thread.join()
 
-    csv_path = Path("data/eeg.csv")
+    csv_path = Path("output/eeg.csv")
+
+    started_event = threading.Event()
     stop_stream = threading.Event()
     stream_thread = threading.Thread(
         target=recorder.stream_to_csv,
-        args=(csv_path, stop_stream)
+        args=(csv_path, stop_stream, started_event)
     )
     stream_thread.start()
+    started_event.wait()
 
     input("Press Enter to stop recording...\n")
     stop_stream.set()
     stream_thread.join()
-    
