@@ -45,7 +45,7 @@ class NIDigitalOutput:
         
         with nidaqmx.Task() as task:
             task.do_channels.add_do_chan(
-                line=lines,
+                lines=lines,
                 line_grouping=LineGrouping.CHAN_PER_LINE
             )
 
@@ -75,13 +75,13 @@ if __name__ == "__main__":
     ni_do = NIDigitalOutput(device_name="Dev1")
 
     line_configs = [
-        LineConfig(line="port0/line0", freq=1.0, duty_cycle = 0.2, idle_state=False),
+        LineConfig(line="port1/line0", freq=1.0, duty_cycle = 0.2, idle_state=False),
     ]
 
     ni_do.output_sync_signal(line_configs=line_configs, stop_event=stop_event, duration_s=5.0)
 
     line_configs = [
-        LineConfig(line="port0/line0", freq=1.0, duty_cycle = 0.4, idle_state=False),
+        LineConfig(line="port1/line0", freq=1.0, duty_cycle = 0.4, idle_state=False),
     ]
     
     thread = threading.Thread(
