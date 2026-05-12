@@ -1,5 +1,9 @@
 ## サンプル内容
-NIのDAQでCSVにデータを記録するプログラム。
+NIのDAQを使った以下のサンプルを含みます。
+
+- `ni_adc.py`: アナログ入力をCSVに記録
+- `ni_counter.py`: カウンタ出力でパルス信号を生成
+- `ni_do.py`: デジタル出力で同期信号を生成
 
 ## ディレクトリ構成
 ```
@@ -7,7 +11,9 @@ sample_002/
 ├── main.py
 │
 ├── src/
-│   └── ni_adc.py
+│   ├── ni_adc.py
+│   ├── ni_counter.py
+│   └── ni_do.py
 │
 ├── output/         ← 結果など
 │
@@ -25,8 +31,8 @@ uvを使用します。uvの導入までは事前に行ってください。
 sample_002 % uv sync
 ```
 ### 方法2（推奨）
-必要なライブラリ(numpyとnidaqmx)が用意できていれば、`ni_adc.py`のみでも動きます。  
-リポジトリから`ni_adc.py`をダウンロードして、ご自身のプロジェクト内で使用してください。  
+必要なライブラリ(`nidaqmx`、必要に応じて`numpy`)が用意できていれば、`src/`配下の各ファイル単体でも動きます。  
+リポジトリから必要なファイルをダウンロードして、ご自身のプロジェクト内で使用してください。  
 ```
 sample_002 % uv add numpy nidaqmx
 ```
@@ -37,8 +43,14 @@ sample_002 % uv add numpy nidaqmx
 ```
 sample_002 % uv run main.py
 ```
+
+`main.py`ではデフォルトで`main_adc()`を実行します。  
+`main_counter()`や`main_do()`を使う場合は、`main.py`内のコメントを切り替えてください。
+
 ### 方法2
-`ni_adc.py`をダウンロードした方は、`ni_adc.py`の実行で動きます。
+`src/`配下の各ファイルは単体でも実行できます。
 ```
-sample_002 % uv run ni_adc.py
+sample_002 % uv run src/ni_adc.py
+sample_002 % uv run src/ni_counter.py
+sample_002 % uv run src/ni_do.py
 ```
