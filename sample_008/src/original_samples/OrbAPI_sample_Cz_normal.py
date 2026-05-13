@@ -1,6 +1,6 @@
 ﻿#OrbAPI_py37.pydとOrbRecognizerCPP2.dllが必要
 import numpy as np
-import OrbViewAPI_py313 as orb
+import src.OrbViewAPI_py313 as orb
 import csv
 import datetime
 import time

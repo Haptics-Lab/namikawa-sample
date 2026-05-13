@@ -1,6 +1,6 @@
 ﻿#OrbAPI_py37.pydとOrbRecognizerCPP2.dllが必要
 import numpy as np
-import OrbViewAPI_py313 as orb
+import src.OrbViewAPI_py313 as orb
 import csv
 import time
 import datetime
@@ -90,7 +90,7 @@ def main():
     clock_lomg = 0
     clock_short = 0
 
-    for j in range(20):
+    for j in range(10):
         print("Acquiring data ... ",j)
         #このスリープが重い処理の代わり
         time.sleep(1)
