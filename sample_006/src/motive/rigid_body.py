@@ -158,6 +158,7 @@ class RigidBodyReceiver:
     def stream(
             self,
             stop_event: threading.Event,
+            started_event: threading.Event,
             print_enabled: bool = False,
             csv_folder_path: Optional[Path] = None,
             csv_batch_frames: int = 30,
@@ -236,6 +237,7 @@ class RigidBodyReceiver:
                 self.config,
                 frame_listener=handle_frame,
                 stop_event=stop_event,
+                started_event=started_event
             )
         finally:
             flush_pending()
@@ -250,12 +252,14 @@ if __name__ == "__main__":
     )
 
     rigid_body_receiver = RigidBodyReceiver(config=natnet_config)
-    
+
+    started_event = threading.Event()
     stop_event = threading.Event()
     thread = threading.Thread(
         target=rigid_body_receiver.stream,
         kwargs={
             "stop_event": stop_event,
+            "started_event": started_event,
             "print_enabled": True,
             "csv_folder_path": Path("output") / "test" / "motive" / "rigid_bodies",
             "csv_batch_frames": 30,
@@ -263,6 +267,7 @@ if __name__ == "__main__":
     )
 
     thread.start()
+    started_event.wait()
 
     try:
         input("Press Enter to stop streaming...\n")

@@ -47,7 +47,8 @@ class NIADC:
     def stream_to_csv(
             self,
             csv_path: Path,
-            stop_event: threading.Event
+            stop_event: threading.Event,
+            started_event: threading.Event
             ):
         
         csv_path.parent.mkdir(parents=True, exist_ok=True)
@@ -88,6 +89,8 @@ class NIADC:
             task.start()
             print(f"Started streaming data with NI DAQ.")
             print(f"    Writing to {csv_path}")
+
+            started_event.set()
 
             try:
                 while not stop_event.is_set():
@@ -136,13 +139,19 @@ if __name__ == "__main__":
         channel_configs=channel_configs
     )
 
+    started_event = threading.Event()
     stop_event = threading.Event()
     thread = threading.Thread(
         target=adc.stream_to_csv,
-        args=(Path("output") / "test" / "ni_data.csv", stop_event),
+        kwargs={
+            "csv_path": Path("output") / "test" / "ni_data.csv",
+            "stop_event": stop_event,
+            "started_event": started_event,
+        },
     )
 
     thread.start()
+    started_event.wait()
 
     try:
         input("Press Enter to stop streaming...\n")

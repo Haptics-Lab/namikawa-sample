@@ -7,13 +7,24 @@ from scipy.io.wavfile import write
 
 class AudioRecorder:
 
-    def __init__(self, device, sample_rate: int = 44100, channels=2, blocksize: int = 1024):
+    def __init__(
+            self,
+            device,
+            sample_rate: int = 44100,
+            channels=2,
+            blocksize: int = 1024
+            ):
         self.device = device
         self.sample_rate = sample_rate
         self.channels = channels
         self.blocksize = blocksize
         
-    def record(self, wav_path: Path, stop_event: threading.Event):
+    def record(
+            self,
+            wav_path: Path,
+            stop_event: threading.Event,
+            started_event: threading.Event
+            ):
         
         wav_path.parent.mkdir(parents=True, exist_ok=True)
         self._frames = []
@@ -36,6 +47,8 @@ class AudioRecorder:
                 print(f"Started recording audio.")
                 print(f"    Writing to {wav_path}")
 
+                started_event.set()
+
                 stop_event.wait()
         
         finally:
@@ -55,15 +68,21 @@ if __name__ == "__main__":
     
     AudioRecorder.check_device()
 
-    audio_recorder = AudioRecorder(device=2, sample_rate=44100, channels=2, blocksize=1024)
+    audio_recorder = AudioRecorder(device=1, sample_rate=44100, channels=2, blocksize=1024)
 
+    started_event = threading.Event()
     stop_event = threading.Event()
     thread = threading.Thread(
         target=audio_recorder.record,
-        args=(Path("output") / "test" / "audio_data.wav", stop_event),
+        kwargs={
+            "wav_path": Path("output") / "test" / "audio_data.wav",
+            "stop_event": stop_event,
+            "started_event": started_event,
+        },
     )
 
     thread.start()
+    started_event.wait()
 
     try:
         input("Press Enter to stop recording...\n")

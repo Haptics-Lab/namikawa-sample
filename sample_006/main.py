@@ -1,13 +1,16 @@
 from pathlib import Path
 import threading
+from functools import partial
 import time
 
-from src.ni.ni_adc import NIADC, ChannelConfig, TerminalConfiguration
+from src.ni.ni_adc import NIADC, ChannelConfig as ADCChannelConfig, TerminalConfiguration
+from src.ni.ni_counter import NICounter, ChannelConfig as CounterChannelConfig
 from src.audio.audio_recorder import AudioRecorder
 from src.mfa.camera_recorder import CameraConfig, MultiCameraRecorder
 from src.motive.natnet_stream import NatNetConfig
 from src.motive.marker_set import MarkerSetReceiver
 from src.motive.rigid_body import RigidBodyReceiver
+from src.eeg.eeg_recorder import EEGRecorder
 
 
 def main():
@@ -16,17 +19,26 @@ def main():
     # folder for raw data (CSV, WAV, etc.)
     raw_data_folder = Path("output") / "participant01" / "trial01"
 
+    recording_bool = {
+        "NI DAQ": True,
+        "Audio": True,
+        "MocapForAll Cameras": False,
+        "Motive MarkerSets": True,
+        "Motive RigidBodies": True,
+        "EEG": True,
+    }
+
     # NI DAQ
-    channel_configs = [
-        ChannelConfig(ch="ai0", ch_label="Tactile LI", terminal_config=TerminalConfiguration.RSE, voltage_range=(-2.0, 2.0)),
-        ChannelConfig(ch="ai1", ch_label="Tactile LT", terminal_config=TerminalConfiguration.RSE, voltage_range=(-2.0, 2.0)),
-        ChannelConfig(ch="ai2", ch_label="Tactile RI", terminal_config=TerminalConfiguration.RSE, voltage_range=(-2.0, 2.0)),
-        ChannelConfig(ch="ai3", ch_label="Tactile RT", terminal_config=TerminalConfiguration.RSE, voltage_range=(-2.0, 2.0)),
-        ChannelConfig(ch="ai8", ch_label="EMG LE", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
-        ChannelConfig(ch="ai9", ch_label="EMG LF", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
-        ChannelConfig(ch="ai10", ch_label="EMG RE", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
-        ChannelConfig(ch="ai11", ch_label="EMG RF", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
-        ChannelConfig(ch="ai12", ch_label="Sync Signal", terminal_config=TerminalConfiguration.RSE, voltage_range=(-0.5, 5.0))
+    adc_channel_configs = [
+        ADCChannelConfig(ch="ai0", ch_label="Tactile LI", terminal_config=TerminalConfiguration.RSE, voltage_range=(-2.0, 2.0)),
+        ADCChannelConfig(ch="ai1", ch_label="Tactile LT", terminal_config=TerminalConfiguration.RSE, voltage_range=(-2.0, 2.0)),
+        ADCChannelConfig(ch="ai2", ch_label="Tactile RI", terminal_config=TerminalConfiguration.RSE, voltage_range=(-2.0, 2.0)),
+        ADCChannelConfig(ch="ai3", ch_label="Tactile RT", terminal_config=TerminalConfiguration.RSE, voltage_range=(-2.0, 2.0)),
+        ADCChannelConfig(ch="ai8", ch_label="EMG LE", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
+        ADCChannelConfig(ch="ai9", ch_label="EMG LF", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
+        ADCChannelConfig(ch="ai10", ch_label="EMG RE", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
+        ADCChannelConfig(ch="ai11", ch_label="EMG RF", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
+        ADCChannelConfig(ch="ai12", ch_label="Sync Signal", terminal_config=TerminalConfiguration.RSE, voltage_range=(-0.5, 5.0))
     ]
 
     ni_adc = NIADC(
@@ -34,11 +46,11 @@ def main():
         sampling_rate=16000.0,
         buffer_size=2048,
         samples_per_read=2048,
-        channel_configs=channel_configs
+        channel_configs=adc_channel_configs
     )
 
     # Audio Recorder
-    audio_recorder = AudioRecorder(device=2, sample_rate=44100, channels=2, blocksize=1024)
+    audio_recorder = AudioRecorder(device=1, sample_rate=44100, channels=2, blocksize=1024)
 
     # Mocap For All Camera Recorder
     multi_camera_recorder = MultiCameraRecorder(configs=[
@@ -57,80 +69,182 @@ def main():
     marker_receiver = MarkerSetReceiver(config=natnet_config)
     rigid_body_receiver = RigidBodyReceiver(config=natnet_config)
 
+    # EEG
+    eeg_recorder = EEGRecorder(com_port="COM3")
+
+
+    # === Sync Signal ===
+    ni_counter = NICounter(device_name="Dev1")
+    counter_start_event = threading.Event()
+    counter_stop_event = threading.Event()
+    counter_thread_error: list[Exception] = []
+
+    def output_counter_sequence():
+        try:
+            ni_counter.output_sync_signal(
+                ch_configs=[
+                    CounterChannelConfig(ch="ctr0", freq=1.0, duty_cycle=0.2),
+                ],
+                start_event=counter_start_event,
+                stop_event=counter_stop_event,
+                duration_s=5.0,
+            )
+
+            if counter_stop_event.is_set():
+                return
+
+            # Continue the sync signal until counter_stop_event is set.
+            ni_counter.output_sync_signal(
+                ch_configs=[
+                    CounterChannelConfig(ch="ctr0", freq=1.0, duty_cycle=0.4),
+                ],
+                start_event=counter_start_event,
+                stop_event=counter_stop_event,
+            )
+        except Exception as exc:
+            counter_thread_error.append(exc)
+            counter_stop_event.set()
+
 
     # === Run Workers ===
+
+    # prepare NI Counter thread and start it
+    counter_thread = threading.Thread(
+        target=output_counter_sequence,
+        name="NI Counter Sync",
+    )
+    counter_thread.start()
+
+    # EEG Impedance Check
+    if recording_bool.get("EEG", True):
+        input("Press Enter to start impedance check...\n")
+        stop_imp = threading.Event()
+        imp_thread = threading.Thread(
+            target=eeg_recorder.check_impedance,
+            args=(stop_imp,)
+        )
+        imp_thread.start()
+
+        input("Press Enter to stop impedance check and start recording...\n")
+        stop_imp.set()
+        imp_thread.join()
+    else:
+        pass
+
+    # recording workers
     stop_event = threading.Event()
     worker_errors: list[tuple[str, Exception]] = []
     error_lock = threading.Lock()
 
-    def run_worker(name: str, target):
+    def run_worker(name: str, target, worker_started_event: threading.Event):
         try:
             target()
         except Exception as exc:
             with error_lock:
                 worker_errors.append((name, exc))
+            worker_started_event.set()
             stop_event.set()
 
     workers = [
         (
             "NI DAQ",
-            lambda: ni_adc.stream_to_csv(
+            lambda started_event: ni_adc.stream_to_csv(
                 csv_path=raw_data_folder / "ni_data.csv",
                 stop_event=stop_event,
+                started_event=started_event,
             ),
         ),
         (
             "Audio",
-            lambda: audio_recorder.record(
+            lambda started_event: audio_recorder.record(
                 wav_path=raw_data_folder / "audio_data.wav",
                 stop_event=stop_event,
+                started_event=started_event,
             ),
         ),
         (
             "MocapForAll Cameras",
-            lambda: multi_camera_recorder.record(
+            lambda started_event: multi_camera_recorder.record(
                 output_folder=raw_data_folder / "mfa",
                 stop_event=stop_event,
+                started_event=started_event,
             ),
         ),
         (
             "Motive MarkerSets",
-            lambda: marker_receiver.stream(
+            lambda started_event: marker_receiver.stream(
                 print_enabled=False,
                 csv_folder_path=raw_data_folder / "motive" / "marker_sets",
                 stop_event=stop_event,
+                started_event=started_event,
             ),
         ),
         (
             "Motive RigidBodies",
-            lambda: rigid_body_receiver.stream(
+            lambda started_event: rigid_body_receiver.stream(
                 print_enabled=False,
                 csv_folder_path=raw_data_folder / "motive" / "rigid_bodies",
                 stop_event=stop_event,
+                started_event=started_event,
+            ),
+        ),
+        (
+            "EEG",
+            lambda started_event: eeg_recorder.stream_to_csv(
+                csv_path=raw_data_folder / "eeg_data.csv",
+                stop_event=stop_event,
+                started_event=started_event
             ),
         ),
     ]
 
+    worker_started_events: dict[str, threading.Event] = {}
     threads: list[threading.Thread] = []
     for worker_name, worker_func in workers:
+        if not recording_bool.get(worker_name, False):
+            print(f"Skipping {worker_name} recording as per configuration.\n")
+            continue
+
+        worker_started_event = threading.Event()
+        worker_started_events[worker_name] = worker_started_event
         thread = threading.Thread(
             target=run_worker,
-            args=(worker_name, worker_func),
+            kwargs={
+                "name": worker_name,
+                "target": partial(worker_func, worker_started_event),
+                "worker_started_event": worker_started_event,
+            },
             name=worker_name,
         )
         thread.start()
         threads.append(thread)
 
-    print("All recorders started.")
-
     try:
-        input("Press Enter to stop all recordings...\n")
+        for event in worker_started_events.values():
+            if stop_event.is_set():
+                break
+            event.wait()
+
+        if not stop_event.is_set():
+            print("All recorders started.")
+            counter_start_event.set()
+            input("Press Enter to stop sync signal and finish recordings...\n")
+            counter_stop_event.set()
+            counter_thread.join()
+            time.sleep(3.0)
     except KeyboardInterrupt:
         print("\nKeyboardInterrupt received. Stopping all recordings...")
     finally:
+        counter_stop_event.set()
+        if counter_thread.is_alive():
+            counter_thread.join()
+
         stop_event.set()
         for thread in threads:
             thread.join()
+
+    if counter_thread_error:
+        raise RuntimeError("NI Counter Sync failed.") from counter_thread_error[0]
 
     if worker_errors:
         for worker_name, error in worker_errors:
