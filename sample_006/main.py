@@ -21,10 +21,10 @@ def main():
 
     recording_bool = {
         "NI DAQ": True,
-        "Audio": True,
+        "Audio": False,
         "MocapForAll Cameras": False,
-        "Motive MarkerSets": True,
-        "Motive RigidBodies": True,
+        "Motive MarkerSets": False,
+        "Motive RigidBodies": False,
         "EEG": True,
     }
 
@@ -50,7 +50,7 @@ def main():
     )
 
     # Audio Recorder
-    audio_recorder = AudioRecorder(device=1, sample_rate=44100, channels=2, blocksize=1024)
+    audio_recorder = AudioRecorder(device=5, sample_rate=44100, channels=2, blocksize=1024)
 
     # Mocap For All Camera Recorder
     multi_camera_recorder = MultiCameraRecorder(configs=[
@@ -87,7 +87,7 @@ def main():
                 ],
                 start_event=counter_start_event,
                 stop_event=counter_stop_event,
-                duration_s=5.0,
+                duration_s=3.5,
             )
 
             if counter_stop_event.is_set():

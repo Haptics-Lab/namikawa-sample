@@ -14,14 +14,17 @@ class EEGRecorder:
         self.com_port = com_port
         self.fs = 1000
         self.oif = orb.OIF()
-        self.connect()
+        self.connected: bool = False
 
     def connect(self):
         self.oif.set_ch_all()
         self.oif.change_buffer_length(5000)
         self.oif.connect(self.com_port)
+        self.connected = True
 
     def check_impedance(self, stop_event: threading.Event):
+        if not self.connected:
+            self.connect()
         self.oif.imp_check_start()
         print("Checking impedance...")
 
@@ -43,6 +46,9 @@ class EEGRecorder:
             stop_event: threading.Event,
             started_event: threading.Event
             ):
+        if not self.connected:
+            self.connect()
+
         csv_path.parent.mkdir(parents=True, exist_ok=True)
 
         header = ["Sample Index", "EEG Time [s]", "Estimated Wall Clock [s]"] + EEG_CHANNELS + ["Sync Signal"]
