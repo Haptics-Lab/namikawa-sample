@@ -21,11 +21,11 @@ def main():
 
     recording_bool = {
         "NI DAQ": True,
-        "Audio": False,
+        "Audio": True,
         "MocapForAll Cameras": False,
-        "Motive MarkerSets": False,
-        "Motive RigidBodies": False,
-        "EEG": True,
+        "Motive MarkerSets": True,
+        "Motive RigidBodies": True,
+        "EEG": False,
     }
 
     # NI DAQ
@@ -141,6 +141,7 @@ def main():
             target()
         except Exception as exc:
             with error_lock:
+                print(f"[ERROR immediately] {name}: {repr(exc)}")
                 worker_errors.append((name, exc))
             worker_started_event.set()
             stop_event.set()

@@ -44,8 +44,7 @@ class EEGRecorder:
             self,
             csv_path: Path,
             stop_event: threading.Event,
-            started_event: threading.Event,
-            save_csv: bool = True,
+            started_event: threading.Event
             ):
         if not self.connected:
             self.connect()
@@ -61,10 +60,7 @@ class EEGRecorder:
         self.oif.clear_memory()
 
         print("Started EEG streaming...")
-        if save_csv:
-            print(f"    Writing to {csv_path}")
-        else:
-            print("    Not saving to CSV (save_csv=False)")
+        print(f"    Writing to {csv_path}")
 
         started_event.set()
 
@@ -72,15 +68,10 @@ class EEGRecorder:
         prev_received_time_ns = None
 
         try:
-            if save_csv:
-                f = open(csv_path, "w", newline="", encoding="utf-8")
+            with open(csv_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow(header)
-            else:
-                f = None
-                writer = None
 
-            try:
                 while not stop_event.is_set():
                     res = self.oif.getfrombuffer(1000)
 
@@ -89,19 +80,14 @@ class EEGRecorder:
                         prev_received_time_ns = received_time_ns - len(res) * 1e9 / self.fs
                     interval_sec = (received_time_ns - prev_received_time_ns) / len(res)
 
-                    if save_csv:
-                        rows = [
-                            [sample_index + i, (sample_index + i)/self.fs, (prev_received_time_ns + interval_sec * (i + 1))/1e9] + list(row[1:13])
-                            for i, row in enumerate(res)
-                        ]
+                    rows = [
+                        [sample_index + i, (sample_index + i)/self.fs, (prev_received_time_ns + interval_sec * (i + 1))/1e9] + list(row[1:13])
+                        for i, row in enumerate(res)
+                    ]
 
-                        writer.writerows(rows)
-                    sample_index += len(res)
+                    writer.writerows(rows)
+                    sample_index += len(rows)
                     prev_received_time_ns = received_time_ns
-            
-            finally:
-                if f is not None:
-                    f.close()
 
         finally:
             self.oif.orbtobuffer_stopinterval()
