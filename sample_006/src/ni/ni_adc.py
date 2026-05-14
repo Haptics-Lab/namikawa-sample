@@ -48,12 +48,13 @@ class NIADC:
             self,
             csv_path: Path,
             stop_event: threading.Event,
-            started_event: threading.Event
+            started_event: threading.Event,
+            save_csv: bool = True
             ):
         
         csv_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with nidaqmx.Task() as task, csv_path.open("w", newline="", encoding="utf-8") as f:
+        with nidaqmx.Task() as task:
 
             # Add channels to the task
             for ch_config in self.ch_configs:
@@ -73,22 +74,30 @@ class NIADC:
 				samps_per_chan=self.buffer_size,
 			)
 
-            writer = csv.writer(f)
-            # Write header row
-            header = [
-                "Sample Index",
-                "DAQ Time [s]",
-                "Wall Clock [s]",
-                "Perf Counter [ns]",
-            ] + task.channel_names
-            writer.writerow(header)
+            if save_csv:
+                f = csv_path.open("w", newline="", encoding="utf-8")
+                writer = csv.writer(f)
+                # Write header row
+                header = [
+                    "Sample Index",
+                    "DAQ Time [s]",
+                    "Wall Clock [s]",
+                    "Perf Counter [ns]",
+                ] + task.channel_names
+                writer.writerow(header)
+            else:
+                f = None
+                writer = None
 
             sample_idx = 0
             expected_block_sec = self.samples_per_read / self.sampling_rate
 
             task.start()
             print(f"Started streaming data with NI DAQ.")
-            print(f"    Writing to {csv_path}")
+            if save_csv:
+                print(f"    Writing to {csv_path}")
+            else:
+                print(f"    Not saving to CSV (save_csv=False)")
 
             started_event.set()
 
@@ -103,17 +112,21 @@ class NIADC:
 
                     data_arr = np.atleast_2d(np.asarray(data, dtype=float)).T
 
-                    for i in range(data_arr.shape[0]):
-                        daq_time = sample_idx / self.sampling_rate
-                        row = [
-                            sample_idx,
-                            f"{daq_time:.6f}",
-                            received_time_ns / 1e9,
-                            received_perf_counter_ns,
-                        ] + data_arr[i].tolist()
-                        writer.writerow(row)
-                        sample_idx += 1
+                    if save_csv:
+                        for i in range(data_arr.shape[0]):
+                            daq_time = sample_idx / self.sampling_rate
+                            row = [
+                                sample_idx,
+                                f"{daq_time:.6f}",
+                                received_time_ns / 1e9,
+                                received_perf_counter_ns,
+                            ] + data_arr[i].tolist()
+                            writer.writerow(row)
+
+                    sample_idx += data_arr.shape[0]
             finally:
+                if f is not None:
+                    f.close()
                 print("Stopped NI data streaming.")
 
 
