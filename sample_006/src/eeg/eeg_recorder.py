@@ -1,12 +1,28 @@
+import sys
 import threading
 from pathlib import Path
 import csv
 import time
+from dataclasses import dataclass
 
 from src.eeg import OrbViewAPI_py313 as orb
 
 
 EEG_CHANNELS = ["Fp1", "Fz", "Fp2", "C3", "Cz", "C4", "O1", "O2", "T8", "T7", "Pz"]
+
+
+@dataclass(frozen=True)
+class EEGConfig:
+    com_port: str
+
+    def to_subprocess_args(self, csv_path: Path) -> list[str]:
+        return [
+            sys.executable,
+            "-m",
+            "src.eeg.eeg_processor",
+            "--com-port", self.com_port,
+            "--csv-path", str(csv_path),
+        ]
 
 
 class EEGRecorder:
@@ -26,14 +42,14 @@ class EEGRecorder:
         if not self.connected:
             self.connect()
         self.oif.imp_check_start()
-        print("Checking impedance...")
+        print("Checking impedance...", flush=True)
 
         labels = ["Ref"] + EEG_CHANNELS
 
         try:
             while not stop_event.is_set():
                 imp_res = self.oif.imp_check()
-                print("  ".join(f"{label}: {value}" for label, value in zip(labels, imp_res)))
+                print("  ".join(f"{label}: {value}" for label, value in zip(labels, imp_res)), flush=True)
 
                 if stop_event.wait(1.0):
                     break
@@ -59,8 +75,8 @@ class EEGRecorder:
         self.oif.orbtobuffer_interval(1000)
         self.oif.clear_memory()
 
-        print("Started EEG streaming...")
-        print(f"    Writing to {csv_path}")
+        print("Started EEG streaming...", flush=True)
+        print(f"    Writing to {csv_path}", flush=True)
 
         started_event.set()
 
@@ -93,7 +109,7 @@ class EEGRecorder:
             self.oif.orbtobuffer_stopinterval()
             self.oif.end()
             self.oif.disconnect()
-            print("Stopped EEG streaming.")
+            print("Stopped EEG streaming.", flush=True)
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ from pathlib import Path
 import threading
 from functools import partial
 import time
+import subprocess
 
 from src.ni.ni_adc import NIADC, ChannelConfig as ADCChannelConfig, TerminalConfiguration
 from src.ni.ni_counter import NICounter, ChannelConfig as CounterChannelConfig
@@ -10,7 +11,7 @@ from src.mfa.camera_recorder import CameraConfig, MultiCameraRecorder
 from src.motive.natnet_stream import NatNetConfig
 from src.motive.marker_set import MarkerSetReceiver
 from src.motive.rigid_body import RigidBodyReceiver
-from src.eeg.eeg_recorder import EEGRecorder
+from src.eeg.eeg_recorder import EEGConfig
 
 
 def main():
@@ -70,7 +71,7 @@ def main():
     rigid_body_receiver = RigidBodyReceiver(config=natnet_config)
 
     # EEG
-    eeg_recorder = EEGRecorder(com_port="COM3")
+    eeg_config = EEGConfig(com_port="COM3")
 
 
     # === Sync Signal ===
@@ -115,21 +116,29 @@ def main():
     )
     counter_thread.start()
 
-    # EEG Impedance Check
+    # EEG subprocess
     if recording_bool.get("EEG", True):
-        input("Press Enter to start impedance check...\n")
-        stop_imp = threading.Event()
-        imp_thread = threading.Thread(
-            target=eeg_recorder.check_impedance,
-            args=(stop_imp,)
+        eeg_process = subprocess.Popen(
+            eeg_config.to_subprocess_args(
+                csv_path=raw_data_folder / "eeg_data.csv"
+            ),
+            stdin=subprocess.PIPE,
+            text=True,
         )
-        imp_thread.start()
+
+        # start impedance check
+        input("Press Enter to start impedance check...\n")
+        eeg_process.stdin.write("START_IMPEDANCE_CHECK\n")
+        eeg_process.stdin.flush()
 
         input("Press Enter to stop impedance check and start recording...\n")
-        stop_imp.set()
-        imp_thread.join()
+        eeg_process.stdin.write("STOP_IMPEDANCE_CHECK\n")
+        eeg_process.stdin.flush()
+
+        eeg_process.stdin.write("START_RECORD\n")
+        eeg_process.stdin.flush()
     else:
-        pass
+        input("Press Enter to start recordings...\n")
 
     # recording workers
     stop_event = threading.Event()
@@ -189,14 +198,6 @@ def main():
                 started_event=started_event,
             ),
         ),
-        (
-            "EEG",
-            lambda started_event: eeg_recorder.stream_to_csv(
-                csv_path=raw_data_folder / "eeg_data.csv",
-                stop_event=stop_event,
-                started_event=started_event
-            ),
-        ),
     ]
 
     worker_started_events: dict[str, threading.Event] = {}
@@ -239,6 +240,10 @@ def main():
         counter_stop_event.set()
         if counter_thread.is_alive():
             counter_thread.join()
+
+        if recording_bool.get("EEG", False):
+            eeg_process.stdin.write("STOP_RECORD\n")
+            eeg_process.stdin.flush()
 
         stop_event.set()
         for thread in threads:
