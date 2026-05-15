@@ -22,6 +22,7 @@ class NIDigitalOutput:
     def output_sync_signal(
             self,
             line_configs: list[LineConfig],
+            start_event: threading.Event,
             stop_event: threading.Event,
             duration_s: float | None = None
             ):
@@ -51,6 +52,8 @@ class NIDigitalOutput:
 
             values = [config.idle_state for config in line_configs]
             task.write(values)
+
+            start_event.wait()
             
             start_time = time.perf_counter()
             
@@ -71,22 +74,25 @@ class NIDigitalOutput:
             task.write(values)
 
 if __name__ == "__main__":
+    start_event = threading.Event()
     stop_event = threading.Event()
     ni_do = NIDigitalOutput(device_name="Dev1")
+
+    input("Press Enter to start sync signal...\n")
+    start_event.set()
 
     line_configs = [
         LineConfig(line="port1/line0", freq=1.0, duty_cycle = 0.2, idle_state=False),
     ]
-
-    ni_do.output_sync_signal(line_configs=line_configs, stop_event=stop_event, duration_s=5.0)
+    ni_do.output_sync_signal(line_configs=line_configs, start_event=start_event, stop_event=stop_event, duration_s=5.0)
 
     line_configs = [
         LineConfig(line="port1/line0", freq=1.0, duty_cycle = 0.4, idle_state=False),
     ]
-    
+
     thread = threading.Thread(
         target=ni_do.output_sync_signal,
-        args=(line_configs, stop_event)
+        args=(line_configs, start_event, stop_event)
     )
     thread.start()
 

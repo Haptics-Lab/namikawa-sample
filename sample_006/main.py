@@ -17,16 +17,17 @@ from src.eeg.eeg_recorder import EEGConfig
 def main():
 
     # === Config ===
+
     # folder for raw data (CSV, WAV, etc.)
-    raw_data_folder = Path("output") / "participant01" / "trial01"
+    raw_data_folder = Path("output") / "20260515" / "trial01"
 
     recording_bool = {
         "NI DAQ": True,
         "Audio": True,
         "MocapForAll Cameras": False,
-        "Motive MarkerSets": True,
-        "Motive RigidBodies": True,
-        "EEG": False,
+        "Motive MarkerSets": False,
+        "Motive RigidBodies": False,
+        "EEG": True,
     }
 
     # NI DAQ
@@ -83,8 +84,8 @@ def main():
     def output_sync_sequence():
         try:
             ni_do.output_sync_signal(
-                ch_configs=[
-                    DOLineConfig(line="port0/0", freq=1.0, duty_cycle=0.2),
+                line_configs=[
+                    DOLineConfig(line="port1/line0", freq=1.0, duty_cycle=0.2),
                 ],
                 start_event=sync_start_event,
                 stop_event=sync_stop_event,
@@ -96,8 +97,8 @@ def main():
 
             # Continue the sync signal until sync_stop_event is set.
             ni_do.output_sync_signal(
-                ch_configs=[
-                    DOLineConfig(line="port0/0", freq=1.0, duty_cycle=0.4),
+                line_configs=[
+                    DOLineConfig(line="port1/line0", freq=1.0, duty_cycle=0.4),
                 ],
                 start_event=sync_start_event,
                 stop_event=sync_stop_event,
@@ -117,14 +118,40 @@ def main():
     sync_thread.start()
 
     # EEG subprocess
+    eeg_started_event = threading.Event()
+    eeg_output_errors: list[Exception] = []
+
+    def forward_eeg_stdout(stream):
+        try:
+            for line in stream:
+                text = line.rstrip("\n")
+                if text == "EEG_RECORDING_STARTED":
+                    eeg_started_event.set()
+                    continue
+                print(text, flush=True)
+        except Exception as exc:
+            eeg_output_errors.append(exc)
+            eeg_started_event.set()
+
+    eeg_process = None
     if recording_bool.get("EEG", True):
         eeg_process = subprocess.Popen(
             eeg_config.to_subprocess_args(
                 csv_path=raw_data_folder / "eeg_data.csv"
             ),
             stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
             text=True,
+            bufsize=1,
         )
+
+        eeg_stdout_thread = threading.Thread(
+            target=forward_eeg_stdout,
+            args=(eeg_process.stdout,),
+            name="EEG Stdout Forwarder",
+            daemon=True,
+        )
+        eeg_stdout_thread.start()
 
         # start impedance check
         input("Press Enter to start impedance check...\n")
@@ -137,6 +164,13 @@ def main():
 
         eeg_process.stdin.write("START_RECORD\n")
         eeg_process.stdin.flush()
+
+        while not eeg_started_event.wait(timeout=0.1):
+            if eeg_process.poll() is not None:
+                raise RuntimeError("EEG subprocess exited before recording started.")
+
+        if eeg_output_errors:
+            raise RuntimeError("Failed to read EEG subprocess output.") from eeg_output_errors[0]
     else:
         input("Press Enter to start recordings...\n")
 
@@ -228,7 +262,7 @@ def main():
             event.wait()
 
         if not stop_event.is_set():
-            print("All recorders started.")
+            print("All recorders started.\n")
             sync_start_event.set()
             input("Press Enter to stop sync signal and finish recordings...\n")
             sync_stop_event.set()
@@ -241,9 +275,12 @@ def main():
         if sync_thread.is_alive():
             sync_thread.join()
 
-        if recording_bool.get("EEG", False):
+        if eeg_process is not None and eeg_process.stdin is not None:
             eeg_process.stdin.write("STOP_RECORD\n")
             eeg_process.stdin.flush()
+            eeg_process.stdin.write("EXIT\n")
+            eeg_process.stdin.flush()
+            eeg_process.wait()
 
         stop_event.set()
         for thread in threads:

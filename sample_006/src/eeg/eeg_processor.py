@@ -22,8 +22,6 @@ def main():
     imp_thread = None
     record_thread = None
 
-    print("EEG processor started.", flush=True)
-
     for cmd in sys.stdin:
         cmd = cmd.strip()
 
@@ -64,20 +62,16 @@ def main():
 
                 record_thread.start()
                 started_event.wait()
+                print("EEG_RECORDING_STARTED", flush=True)
 
         elif cmd == "STOP_RECORD":
             if record_thread is not None:
-                print("Stopping EEG recording...", flush=True)
 
                 stop_event.set()
                 record_thread.join()
                 record_thread = None
 
-                print("EEG recording stopped.", flush=True)
-
         elif cmd == "EXIT":
-            print("Exiting EEG processor...", flush=True)
-
             stop_imp.set()
             stop_event.set()
 

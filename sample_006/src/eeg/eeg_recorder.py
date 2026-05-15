@@ -42,14 +42,14 @@ class EEGRecorder:
         if not self.connected:
             self.connect()
         self.oif.imp_check_start()
-        print("Checking impedance...", flush=True)
+        print("    Checking impedance...", flush=True)
 
         labels = ["Ref"] + EEG_CHANNELS
 
         try:
             while not stop_event.is_set():
                 imp_res = self.oif.imp_check()
-                print("  ".join(f"{label}: {value}" for label, value in zip(labels, imp_res)), flush=True)
+                print("    ", "  ".join(f"{label}: {value}" for label, value in zip(labels, imp_res)), flush=True)
 
                 if stop_event.wait(1.0):
                     break
@@ -75,7 +75,7 @@ class EEGRecorder:
         self.oif.orbtobuffer_interval(1000)
         self.oif.clear_memory()
 
-        print("Started EEG streaming...", flush=True)
+        print("Started EEG streaming.", flush=True)
         print(f"    Writing to {csv_path}", flush=True)
 
         started_event.set()
