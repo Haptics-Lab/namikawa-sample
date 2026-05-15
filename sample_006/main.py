@@ -5,7 +5,7 @@ import time
 import subprocess
 
 from src.ni.ni_adc import NIADC, ChannelConfig as ADCChannelConfig, TerminalConfiguration
-from src.ni.ni_counter import NICounter, ChannelConfig as CounterChannelConfig
+from src.ni.ni_do import NIDigitalOutput, LineConfig as DOLineConfig
 from src.audio.audio_recorder import AudioRecorder
 from src.mfa.camera_recorder import CameraConfig, MultiCameraRecorder
 from src.motive.natnet_stream import NatNetConfig
@@ -75,46 +75,46 @@ def main():
 
 
     # === Sync Signal ===
-    ni_counter = NICounter(device_name="Dev1")
-    counter_start_event = threading.Event()
-    counter_stop_event = threading.Event()
-    counter_thread_error: list[Exception] = []
+    ni_do = NIDigitalOutput(device_name="Dev1")
+    sync_start_event = threading.Event()
+    sync_stop_event = threading.Event()
+    sync_thread_error: list[Exception] = []
 
-    def output_counter_sequence():
+    def output_sync_sequence():
         try:
-            ni_counter.output_sync_signal(
+            ni_do.output_sync_signal(
                 ch_configs=[
-                    CounterChannelConfig(ch="ctr0", freq=1.0, duty_cycle=0.2),
+                    DOLineConfig(line="port0/0", freq=1.0, duty_cycle=0.2),
                 ],
-                start_event=counter_start_event,
-                stop_event=counter_stop_event,
+                start_event=sync_start_event,
+                stop_event=sync_stop_event,
                 duration_s=3.5,
             )
 
-            if counter_stop_event.is_set():
+            if sync_stop_event.is_set():
                 return
 
-            # Continue the sync signal until counter_stop_event is set.
-            ni_counter.output_sync_signal(
+            # Continue the sync signal until sync_stop_event is set.
+            ni_do.output_sync_signal(
                 ch_configs=[
-                    CounterChannelConfig(ch="ctr0", freq=1.0, duty_cycle=0.4),
+                    DOLineConfig(line="port0/0", freq=1.0, duty_cycle=0.4),
                 ],
-                start_event=counter_start_event,
-                stop_event=counter_stop_event,
+                start_event=sync_start_event,
+                stop_event=sync_stop_event,
             )
         except Exception as exc:
-            counter_thread_error.append(exc)
-            counter_stop_event.set()
+            sync_thread_error.append(exc)
+            sync_stop_event.set()
 
 
     # === Run Workers ===
 
-    # prepare NI Counter thread and start it
-    counter_thread = threading.Thread(
-        target=output_counter_sequence,
-        name="NI Counter Sync",
+    # prepare NI DO thread and start it
+    sync_thread = threading.Thread(
+        target=output_sync_sequence,
+        name="NI DO Sync Signal",
     )
-    counter_thread.start()
+    sync_thread.start()
 
     # EEG subprocess
     if recording_bool.get("EEG", True):
@@ -229,17 +229,17 @@ def main():
 
         if not stop_event.is_set():
             print("All recorders started.")
-            counter_start_event.set()
+            sync_start_event.set()
             input("Press Enter to stop sync signal and finish recordings...\n")
-            counter_stop_event.set()
-            counter_thread.join()
+            sync_stop_event.set()
+            sync_thread.join()
             time.sleep(3.0)
     except KeyboardInterrupt:
         print("\nKeyboardInterrupt received. Stopping all recordings...")
     finally:
-        counter_stop_event.set()
-        if counter_thread.is_alive():
-            counter_thread.join()
+        sync_stop_event.set()
+        if sync_thread.is_alive():
+            sync_thread.join()
 
         if recording_bool.get("EEG", False):
             eeg_process.stdin.write("STOP_RECORD\n")
@@ -249,8 +249,8 @@ def main():
         for thread in threads:
             thread.join()
 
-    if counter_thread_error:
-        raise RuntimeError("NI Counter Sync failed.") from counter_thread_error[0]
+    if sync_thread_error:
+        raise RuntimeError("NI DO Sync failed.") from sync_thread_error[0]
 
     if worker_errors:
         for worker_name, error in worker_errors:
