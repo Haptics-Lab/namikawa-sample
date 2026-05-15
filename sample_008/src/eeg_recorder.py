@@ -53,7 +53,7 @@ class EEGRecorder:
         self.oif.orbtobuffer_interval(1000)
         self.oif.clear_memory()
 
-        print("Started EEG streaming...")
+        print("Started EEG streaming.")
         print(f"    Writing to {csv_path}")
 
         started_event.set()
