@@ -5,7 +5,7 @@ import time
 import subprocess
 
 from src.ni.ni_adc import NIADC, ChannelConfig as ADCChannelConfig, TerminalConfiguration
-from src.ni.ni_do import NIDigitalOutput, LineConfig as DOLineConfig
+from src.ni.ni_counter import NICounter, ChannelConfig as CounterChannelConfig
 from src.audio.audio_recorder import AudioRecorder
 from src.mfa.camera_recorder import CameraConfig, MultiCameraRecorder
 from src.motive.natnet_stream import NatNetConfig
@@ -19,7 +19,7 @@ def main():
     # === Config ===
 
     # folder for raw data (CSV, WAV, etc.)
-    raw_data_folder = Path("output") / "20260515" / "trial01"
+    raw_data_folder = Path("output") / "participant01" / "trial01"
 
     recording_bool = {
         "NI DAQ": True,
@@ -76,16 +76,16 @@ def main():
 
 
     # === Sync Signal ===
-    ni_do = NIDigitalOutput(device_name="Dev1")
+    ni_counter = NICounter(device_name="Dev1")
     sync_start_event = threading.Event()
     sync_stop_event = threading.Event()
     sync_thread_error: list[Exception] = []
 
     def output_sync_sequence():
         try:
-            ni_do.output_sync_signal(
-                line_configs=[
-                    DOLineConfig(line="port1/line0", freq=1.0, duty_cycle=0.2),
+            ni_counter.output_sync_signal(
+                ch_configs=[
+                    CounterChannelConfig(ch="ctr0", freq=1.0, duty_cycle=0.2),
                 ],
                 start_event=sync_start_event,
                 stop_event=sync_stop_event,
@@ -96,9 +96,9 @@ def main():
                 return
 
             # Continue the sync signal until sync_stop_event is set.
-            ni_do.output_sync_signal(
-                line_configs=[
-                    DOLineConfig(line="port1/line0", freq=1.0, duty_cycle=0.4),
+            ni_counter.output_sync_signal(
+                ch_configs=[
+                    CounterChannelConfig(ch="ctr0", freq=1.0, duty_cycle=0.4),
                 ],
                 start_event=sync_start_event,
                 stop_event=sync_stop_event,
@@ -110,10 +110,10 @@ def main():
 
     # === Run Workers ===
 
-    # prepare NI DO thread and start it
+    # prepare NI counter thread and start it
     sync_thread = threading.Thread(
         target=output_sync_sequence,
-        name="NI DO Sync Signal",
+        name="NI Counter Sync Signal",
     )
     sync_thread.start()
 
