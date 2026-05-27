@@ -18,11 +18,11 @@ from src.plot.live_plotter import run_live_plot
 
 
 def start_live_plot_process(
-    enabled: bool,
-    channel_labels: list[str],
-    plot_groups: list[tuple[str, list[int]]],
-    title: str,
-):
+        enabled: bool,
+        channel_labels: list[str],
+        plot_groups: list[tuple[str, list[int]]],
+        title: str,
+        ):
     if not enabled:
         return None, None, None, None
 
@@ -390,8 +390,8 @@ def main():
 
         stop_live_plot_process(plot_queue, plot_stop_event, plot_process)
 
-    if sync_thread_error:
-        raise RuntimeError("NI DO Sync failed.") from sync_thread_error[0]
+    if sync_signal_bool and sync_thread_error:
+        raise RuntimeError("Sync failed.") from sync_thread_error[0]
 
     if worker_errors:
         for worker_name, error in worker_errors:
