@@ -104,7 +104,8 @@ class MultiCameraRecorder:
     def record(
             self,
             output_folder: Path,
-            stop_event: threading.Event
+            stop_event: threading.Event,
+            started_event: threading.Event
             ):
         
         recorders = [CameraRecorder(config) for config in self.configs]
@@ -121,6 +122,8 @@ class MultiCameraRecorder:
                     f"    Camera {recorder.config.device} timestamps -> "
                     f"{recorder.output_path.with_name(f'{recorder.output_path.stem}_timestamps.csv')}"
                 )
+
+            started_event.set()
 
             while not stop_event.is_set():
                 for recorder in recorders:
@@ -145,13 +148,19 @@ if __name__ == "__main__":
         CameraConfig(device=3, width=640, height=480, fps=30),
     ])
 
+    started_event = threading.Event()
     stop_event = threading.Event()
     thread = threading.Thread(
         target=multi_camera_recorder.record,
-        args=(Path("output") / "test" / "mfa", stop_event),
+        kwargs={
+            "output_folder": Path("output") / "test" / "mfa",
+            "stop_event": stop_event,
+            "started_event": started_event,
+        },
     )
 
     thread.start()
+    started_event.wait()
 
     try:
         input("Press Enter to stop recording...\n")

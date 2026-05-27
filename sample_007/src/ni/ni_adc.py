@@ -1,13 +1,16 @@
 import csv
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from dataclasses import dataclass
 import time
-from typing import Callable
 
 import numpy as np
 import nidaqmx
 from nidaqmx.constants import TerminalConfiguration, AcquisitionType
+
+
+PlotData = tuple[list[float], list[list[float]]]
 
 
 @dataclass(frozen=True)
@@ -49,7 +52,8 @@ class NIADC:
             self,
             csv_path: Path,
             stop_event: threading.Event,
-            preview_listener: Callable[[dict], None] | None = None,
+            started_event: threading.Event,
+            plot_callback: Callable[[PlotData], None] | None = None,
             ):
         
         csv_path.parent.mkdir(parents=True, exist_ok=True)
@@ -91,6 +95,8 @@ class NIADC:
             print(f"Started streaming data with NI DAQ.")
             print(f"    Writing to {csv_path}")
 
+            started_event.set()
+
             try:
                 while not stop_event.is_set():
                     data = task.read(
@@ -101,26 +107,23 @@ class NIADC:
                     received_perf_counter_ns = time.perf_counter_ns()
 
                     data_arr = np.atleast_2d(np.asarray(data, dtype=float)).T
-
-                    if preview_listener is not None and data_arr.size > 0:
-                        preview_listener(
-                            {
-                                "sample_idx": sample_idx,
-                                "channel_names": list(task.channel_names),
-                                "values": data_arr[-1].tolist(),
-                            }
-                        )
+                    daq_times = (np.arange(data_arr.shape[0], dtype=float) + sample_idx) / self.sampling_rate
 
                     for i in range(data_arr.shape[0]):
-                        daq_time = sample_idx / self.sampling_rate
                         row = [
                             sample_idx,
-                            f"{daq_time:.6f}",
+                            f"{daq_times[i]:.6f}",
                             received_time_ns / 1e9,
                             received_perf_counter_ns,
                         ] + data_arr[i].tolist()
                         writer.writerow(row)
                         sample_idx += 1
+
+                    if plot_callback is not None:
+                        try:
+                            plot_callback((daq_times.tolist(), data_arr.tolist()))
+                        except Exception as e:
+                            print(f"Plot callback error: {e}")
             finally:
                 print("Stopped NI data streaming.")
 
@@ -147,13 +150,19 @@ if __name__ == "__main__":
         channel_configs=channel_configs
     )
 
+    started_event = threading.Event()
     stop_event = threading.Event()
     thread = threading.Thread(
         target=adc.stream_to_csv,
-        args=(Path("output") / "test" / "ni_data.csv", stop_event),
+        kwargs={
+            "csv_path": Path("output") / "test" / "ni_data.csv",
+            "stop_event": stop_event,
+            "started_event": started_event,
+        },
     )
 
     thread.start()
+    started_event.wait()
 
     try:
         input("Press Enter to stop streaming...\n")
