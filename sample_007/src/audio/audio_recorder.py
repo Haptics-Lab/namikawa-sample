@@ -68,7 +68,7 @@ if __name__ == "__main__":
     
     AudioRecorder.check_device()
 
-    audio_recorder = AudioRecorder(device=1, sample_rate=44100, channels=2, blocksize=1024)
+    audio_recorder = AudioRecorder(device=5, sample_rate=44100, channels=2, blocksize=1024)
 
     started_event = threading.Event()
     stop_event = threading.Event()
