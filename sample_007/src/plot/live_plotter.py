@@ -4,15 +4,33 @@ from collections import deque
 import matplotlib.pyplot as plt
 
 
-def run_live_plot(plot_queue, start_event, stop_event, window_seconds=5.0):
+def run_live_plot(
+    plot_queue,
+    start_event,
+    stop_event,
+    channel_labels: list[str],
+    plot_groups: list[tuple[str, list[int]]],
+    window_seconds: float = 5.0,
+    title: str = "Live Plot",
+):
     if not _wait_until_started(start_event, stop_event):
         return
 
     plt.ion()
-    fig, ax = plt.subplots()
+
+    fig, axes = plt.subplots(
+        len(plot_groups),
+        1,
+        sharex=True,
+        figsize=(10, 2.5 * len(plot_groups)),
+    )
+    fig.canvas.manager.set_window_title(title)
+
+    if len(plot_groups) == 1:
+        axes = [axes]
 
     buffers = None
-    lines = []
+    lines_by_channel = {}
 
     while not stop_event.is_set():
         try:
@@ -26,14 +44,24 @@ def run_live_plot(plot_queue, start_event, stop_event, window_seconds=5.0):
         if buffers is None:
             channel_count = len(values[0])
             buffers = [
-                {
-                    "times": deque(),
-                    "values": deque(),
-                }
+                {"times": deque(), "values": deque()}
                 for _ in range(channel_count)
             ]
-            lines = [ax.plot([], [], label=f"ch{index}")[0] for index in range(channel_count)]
-            ax.legend(loc="upper right")
+
+            for ax, (group_name, channel_indices) in zip(axes, plot_groups):
+                ax.set_title(group_name)
+
+                for channel_index in channel_indices:
+                    label = channel_labels[channel_index]
+
+                    if "sync" in label.lower():
+                        line = ax.step([], [], where="post", label=label)[0]
+                    else:
+                        line = ax.plot([], [], label=label)[0]
+
+                    lines_by_channel[channel_index] = line
+
+                ax.legend(loc="upper right")
 
         latest_time = times[-1]
 
@@ -47,11 +75,16 @@ def run_live_plot(plot_queue, start_event, stop_event, window_seconds=5.0):
                 buffer["times"].popleft()
                 buffer["values"].popleft()
 
-        for line, buffer in zip(lines, buffers):
-            line.set_data(buffer["times"], buffer["values"])
+        for channel_index, line in lines_by_channel.items():
+            line.set_data(
+                buffers[channel_index]["times"],
+                buffers[channel_index]["values"],
+            )
 
-        ax.relim()
-        ax.autoscale_view()
+        for ax in axes:
+            ax.relim()
+            ax.autoscale_view()
+
         fig.canvas.draw()
         fig.canvas.flush_events()
 

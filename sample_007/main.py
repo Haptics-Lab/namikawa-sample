@@ -17,11 +17,17 @@ from src.eeg.eeg_recorder import EEGConfig
 from src.plot.live_plotter import run_live_plot
 
 
-def start_live_plot_process(enabled: bool):
+def start_live_plot_process(
+    enabled: bool,
+    channel_labels: list[str],
+    plot_groups: list[tuple[str, list[int]]],
+    title: str,
+):
     if not enabled:
         return None, None, None, None
 
     plot_queue = mp.Queue(maxsize=1)
+    plot_queue.cancel_join_thread()
     plot_start_event = mp.Event()
     plot_stop_event = mp.Event()
 
@@ -31,9 +37,12 @@ def start_live_plot_process(enabled: bool):
             "plot_queue": plot_queue,
             "start_event": plot_start_event,
             "stop_event": plot_stop_event,
+            "channel_labels": channel_labels,
+            "plot_groups": plot_groups,
             "window_seconds": 5.0,
+            "title": title,
         },
-        name="Live Plot Process",
+        name=f"{title} Live Plot Process",
     )
     plot_process.start()
 
@@ -58,17 +67,19 @@ def send_latest_to_plot(plot_queue, plot_start_event, data):
             pass
 
 
-def stop_live_plot_process(plot_stop_event, plot_process):
+def stop_live_plot_process(plot_queue, plot_stop_event, plot_process):
     if plot_stop_event is not None:
         plot_stop_event.set()
 
-    if plot_process is None:
-        return
+    if plot_process is not None:
+        plot_process.join(timeout=5.0)
+        if plot_process.is_alive():
+            plot_process.terminate()
+            plot_process.join()
 
-    plot_process.join(timeout=5.0)
-    if plot_process.is_alive():
-        plot_process.terminate()
-        plot_process.join()
+    if plot_queue is not None:
+        plot_queue.close()
+        plot_queue.cancel_join_thread()
 
 
 def main():
@@ -84,7 +95,7 @@ def main():
         "MocapForAll Cameras": False,
         "Motive MarkerSets": False,
         "Motive RigidBodies": False,
-        "EEG": True,
+        "EEG": False,
     }
 
     live_plot_enabled = True
@@ -135,8 +146,18 @@ def main():
 
 
     # === Live Plot Process ===
+    ni_channel_labels = [config.ch_label for config in adc_channel_configs]
+    ni_plot_groups = [
+        ("Tactile Sensors", [0, 1, 2, 3]),
+        ("EMG", [4, 5, 6, 7]),
+        ("Sync Signal", [8]),
+    ]
+
     plot_queue, plot_start_event, plot_stop_event, plot_process = start_live_plot_process(
-        enabled=live_plot_enabled
+        enabled=live_plot_enabled,
+        channel_labels=ni_channel_labels,
+        plot_groups=ni_plot_groups,
+        title="NI DAQ",
     )
 
     def send_to_plot(data):
@@ -357,7 +378,7 @@ def main():
         for thread in threads:
             thread.join()
 
-        stop_live_plot_process(plot_stop_event, plot_process)
+        stop_live_plot_process(plot_queue, plot_stop_event, plot_process)
 
     if sync_thread_error:
         raise RuntimeError("NI DO Sync failed.") from sync_thread_error[0]
