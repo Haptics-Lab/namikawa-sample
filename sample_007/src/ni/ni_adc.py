@@ -58,6 +58,8 @@ class NIADC:
         
         csv_path.parent.mkdir(parents=True, exist_ok=True)
 
+        plot_downsample_factor = self.sampling_rate / 1000.0
+
         with nidaqmx.Task() as task, csv_path.open("w", newline="", encoding="utf-8") as f:
 
             # Add channels to the task
@@ -121,7 +123,7 @@ class NIADC:
 
                     if plot_callback is not None:
                         try:
-                            plot_callback((daq_times.tolist(), data_arr.tolist()))
+                            plot_callback((daq_times[::int(plot_downsample_factor)].tolist(), data_arr[::int(plot_downsample_factor)].tolist()))
                         except Exception as e:
                             print(f"Plot callback error: {e}")
             finally:
