@@ -98,14 +98,16 @@ def main():
         "EEG": False,
     }
 
+    sync_signal_bool = True # Set to False to disable sync signal output
+
     live_plot_enabled = True
 
     # NI DAQ
     adc_channel_configs = [
-        ADCChannelConfig(ch="ai0", ch_label="Tactile LI", terminal_config=TerminalConfiguration.RSE, voltage_range=(-2.0, 2.0)),
-        ADCChannelConfig(ch="ai1", ch_label="Tactile LT", terminal_config=TerminalConfiguration.RSE, voltage_range=(-2.0, 2.0)),
-        ADCChannelConfig(ch="ai2", ch_label="Tactile RI", terminal_config=TerminalConfiguration.RSE, voltage_range=(-2.0, 2.0)),
-        ADCChannelConfig(ch="ai3", ch_label="Tactile RT", terminal_config=TerminalConfiguration.RSE, voltage_range=(-2.0, 2.0)),
+        ADCChannelConfig(ch="ai0", ch_label="Tactile LI", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
+        ADCChannelConfig(ch="ai1", ch_label="Tactile LT", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
+        ADCChannelConfig(ch="ai2", ch_label="Tactile RI", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
+        ADCChannelConfig(ch="ai3", ch_label="Tactile RT", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
         ADCChannelConfig(ch="ai8", ch_label="EMG LE", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
         ADCChannelConfig(ch="ai9", ch_label="EMG LF", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
         ADCChannelConfig(ch="ai10", ch_label="EMG RE", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
@@ -165,10 +167,11 @@ def main():
 
 
     # === Sync Signal ===
-    ni_counter = NICounter(device_name="Dev1")
-    sync_start_event = threading.Event()
-    sync_stop_event = threading.Event()
-    sync_thread_error: list[Exception] = []
+    if sync_signal_bool:
+        ni_counter = NICounter(device_name="Dev1")
+        sync_start_event = threading.Event()
+        sync_stop_event = threading.Event()
+        sync_thread_error: list[Exception] = []
 
     def output_sync_sequence():
         try:
@@ -200,11 +203,12 @@ def main():
     # === Run Workers ===
 
     # prepare NI counter thread and start it
-    sync_thread = threading.Thread(
-        target=output_sync_sequence,
-        name="NI Counter Sync Signal",
-    )
-    sync_thread.start()
+    if sync_signal_bool:
+        sync_thread = threading.Thread(
+            target=output_sync_sequence,
+            name="NI Counter Sync Signal",
+        )
+        sync_thread.start()
 
     # EEG subprocess
     eeg_started_event = threading.Event()
@@ -355,17 +359,23 @@ def main():
             print("All recorders started.\n")
             if plot_start_event is not None:
                 plot_start_event.set()
-            sync_start_event.set()
-            input("Press Enter to stop sync signal and finish recordings...\n")
-            sync_stop_event.set()
-            sync_thread.join()
-            time.sleep(3.0)
+            if sync_signal_bool:
+                sync_start_event.set()
+                input("Press Enter to stop sync signal and finish recordings...\n")
+                sync_stop_event.set()
+                sync_thread.join()
+                time.sleep(3.0)
+            else:
+                input("Did you start the sync signal? Press Enter to continue...\n")
+                input("Stop sync signal before finishing recordings.\nDid you stop it? Press Enter to continue...\n")
+                input("Press Enter to finish recordings...\n")
     except KeyboardInterrupt:
         print("\nKeyboardInterrupt received. Stopping all recordings...")
     finally:
-        sync_stop_event.set()
-        if sync_thread.is_alive():
-            sync_thread.join()
+        if sync_signal_bool:
+            sync_stop_event.set()
+            if sync_thread.is_alive():
+                sync_thread.join()
 
         if eeg_process is not None and eeg_process.stdin is not None:
             eeg_process.stdin.write("STOP_RECORD\n")
