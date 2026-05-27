@@ -85,7 +85,7 @@ def run_live_plot(
             ax.relim()
             ax.autoscale_view()
 
-        fig.canvas.draw()
+        fig.canvas.draw_idle()
         fig.canvas.flush_events()
 
     plt.close(fig)
