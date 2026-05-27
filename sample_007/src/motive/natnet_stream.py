@@ -21,6 +21,7 @@ FrameListener = Callable[[dict[str, Any]], None]
 def run_natnet_stream(
         config: NatNetConfig,
         stop_event: threading.Event,
+        started_event: threading.Event,
         *,
         rigid_body_listener: RigidBodyListener | None = None,
         frame_listener: FrameListener | None = None,
@@ -35,6 +36,8 @@ def run_natnet_stream(
 
     if not client.run(config.run_mode):
         raise RuntimeError("Failed to start NatNet client")
+    
+    started_event.set()
 
     try:
         stop_event.wait()

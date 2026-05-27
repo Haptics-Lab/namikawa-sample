@@ -177,6 +177,7 @@ class MarkerSetReceiver:
     def stream(
             self,
             stop_event: threading.Event,
+            started_event: threading.Event,
             print_enabled: bool = False,
             csv_folder_path: Optional[Path] = None,
             csv_batch_frames: int = 30,
@@ -272,6 +273,7 @@ class MarkerSetReceiver:
                 self.config,
                 frame_listener=handle_frame,
                 stop_event=stop_event,
+                started_event=started_event
             )
         finally:
             flush_pending()
@@ -287,6 +289,7 @@ if __name__ == "__main__":
 
     marker_set_receiver = MarkerSetReceiver(config=natnet_config)
     
+    started_event = threading.Event()
     stop_event = threading.Event()
     thread = threading.Thread(
         target=marker_set_receiver.stream,
@@ -294,10 +297,12 @@ if __name__ == "__main__":
             "print_enabled": False,
             "csv_folder_path": Path("output") / "test" / "motive" / "marker_sets",
             "stop_event": stop_event,
+            "started_event": started_event,
         },
     )
     
     thread.start()
+    started_event.wait()
 
     try:
         input("Press Enter to stop streaming...\n")
