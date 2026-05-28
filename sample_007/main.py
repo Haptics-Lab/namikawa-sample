@@ -96,7 +96,7 @@ def main():
         "MocapForAll Cameras": False,
         "Motive MarkerSets": False,
         "Motive RigidBodies": False,
-        "EEG": False,
+        "EEG": True,
     }
 
     # Sync signal output during recording
