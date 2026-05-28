@@ -79,6 +79,8 @@ class EEGRecorder:
 
         csv_path.parent.mkdir(parents=True, exist_ok=True)
 
+        plot_downsample_factor = self.fs / 500.0
+
         header = ["Sample Index", "EEG Time [s]", "Estimated Wall Clock [s]"] + EEG_CHANNELS + ["Sync Signal"]
 
         self.oif.start()
@@ -118,7 +120,7 @@ class EEGRecorder:
                         try:
                             plot_times = [row[1] for row in rows]
                             plot_values = [row[3:] for row in rows]
-                            plot_callback((plot_times, plot_values))
+                            plot_callback((plot_times[::int(plot_downsample_factor)], plot_values[::int(plot_downsample_factor)]))
                         except Exception as exc:
                             print(f"EEG plot callback error: {exc}", flush=True)
 
