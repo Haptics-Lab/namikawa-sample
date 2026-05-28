@@ -100,7 +100,8 @@ def main():
 
     sync_signal_bool = True # Set to False to disable sync signal output
 
-    live_plot_enabled = True
+    ni_live_plot_enabled = True
+    eeg_live_plot_enabled = True
 
     # NI DAQ
     adc_channel_configs = [
@@ -147,7 +148,7 @@ def main():
     eeg_config = EEGConfig(com_port="COM3")
 
 
-    # === Live Plot Process ===
+    # === NI Live Plot Process ===
     ni_channel_labels = [config.ch_label for config in adc_channel_configs]
     ni_plot_groups = [
         ("Tactile Sensors", [0, 1, 2, 3]),
@@ -155,15 +156,15 @@ def main():
         ("Sync Signal", [8]),
     ]
 
-    plot_queue, plot_start_event, plot_stop_event, plot_process = start_live_plot_process(
-        enabled=live_plot_enabled,
+    ni_plot_queue, ni_plot_start_event, ni_plot_stop_event, ni_plot_process = start_live_plot_process(
+        enabled=ni_live_plot_enabled,
         channel_labels=ni_channel_labels,
         plot_groups=ni_plot_groups,
         title="NI DAQ",
     )
 
-    def send_to_plot(data):
-        send_latest_to_plot(plot_queue, plot_start_event, data)
+    def send_to_ni_plot(data):
+        send_latest_to_plot(ni_plot_queue, ni_plot_start_event, data)
 
 
     # === Sync Signal ===
@@ -230,7 +231,8 @@ def main():
     if recording_bool.get("EEG", True):
         eeg_process = subprocess.Popen(
             eeg_config.to_subprocess_args(
-                csv_path=raw_data_folder / "eeg_data.csv"
+                csv_path=raw_data_folder / "eeg_data.csv",
+                live_plot_enabled=eeg_live_plot_enabled,
             ),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -289,7 +291,7 @@ def main():
                 csv_path=raw_data_folder / "ni_data.csv",
                 stop_event=stop_event,
                 started_event=started_event,
-                plot_callback=send_to_plot if live_plot_enabled else None,
+                plot_callback=send_to_ni_plot if ni_live_plot_enabled else None,
             ),
         ),
         (
@@ -357,8 +359,8 @@ def main():
 
         if not stop_event.is_set():
             print("All recorders started.\n")
-            if plot_start_event is not None:
-                plot_start_event.set()
+            if ni_plot_start_event is not None:
+                ni_plot_start_event.set()
             if sync_signal_bool:
                 sync_start_event.set()
                 input("Press Enter to stop sync signal and finish recordings...\n")
@@ -388,7 +390,7 @@ def main():
         for thread in threads:
             thread.join()
 
-        stop_live_plot_process(plot_queue, plot_stop_event, plot_process)
+        stop_live_plot_process(ni_plot_queue, ni_plot_stop_event, ni_plot_process)
 
     if sync_signal_bool and sync_thread_error:
         raise RuntimeError("Sync failed.") from sync_thread_error[0]

@@ -4,25 +4,30 @@ from pathlib import Path
 import csv
 import time
 from dataclasses import dataclass
+from collections.abc import Callable
 
 from src.eeg import OrbViewAPI_py313 as orb
 
 
 EEG_CHANNELS = ["Fp1", "Fz", "Fp2", "C3", "Cz", "C4", "O1", "O2", "T8", "T7", "Pz"]
+PlotData = tuple[list[float], list[list[float]]]
 
 
 @dataclass(frozen=True)
 class EEGConfig:
     com_port: str
 
-    def to_subprocess_args(self, csv_path: Path) -> list[str]:
-        return [
+    def to_subprocess_args(self, csv_path: Path, live_plot_enabled: bool = False) -> list[str]:
+        args = [
             sys.executable,
             "-m",
             "src.eeg.eeg_processor",
             "--com-port", self.com_port,
             "--csv-path", str(csv_path),
         ]
+        if live_plot_enabled:
+            args.append("--live-plot-enabled")
+        return args
 
 
 class EEGRecorder:
@@ -60,7 +65,8 @@ class EEGRecorder:
             self,
             csv_path: Path,
             stop_event: threading.Event,
-            started_event: threading.Event
+            started_event: threading.Event,
+            plot_callback: Callable[[PlotData], None] | None = None,
             ):
         if not self.connected:
             self.connect()
@@ -102,6 +108,14 @@ class EEGRecorder:
                     ]
 
                     writer.writerows(rows)
+                    if plot_callback is not None and rows:
+                        try:
+                            plot_times = [row[1] for row in rows]
+                            plot_values = [row[3:] for row in rows]
+                            plot_callback((plot_times, plot_values))
+                        except Exception as exc:
+                            print(f"EEG plot callback error: {exc}", flush=True)
+
                     sample_index += len(rows)
                     prev_received_time_ns = received_time_ns
 
