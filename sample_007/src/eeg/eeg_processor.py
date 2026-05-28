@@ -1,11 +1,73 @@
 import argparse
 from pathlib import Path
 import threading
+import multiprocessing as mp
 import sys
 import queue
+import json
 
 from src.eeg.eeg_recorder import EEGConfig, EEGRecorder, EEG_CHANNELS
 from src.plot.live_plotter import run_live_plot
+
+
+def start_live_plot_process(enabled: bool, plot_groups):
+    if not enabled:
+        return None, None, None, None
+
+    plot_queue = mp.Queue(maxsize=1)
+    plot_queue.cancel_join_thread()
+    plot_start_event = mp.Event()
+    plot_stop_event = mp.Event()
+
+    plot_process = mp.Process(
+        target=run_live_plot,
+        kwargs={
+            "plot_queue": plot_queue,
+            "start_event": plot_start_event,
+            "stop_event": plot_stop_event,
+            "channel_labels": EEG_CHANNELS + ["Sync Signal"],
+            "plot_groups": plot_groups,
+            "window_seconds": 5.0,
+            "title": "EEG",
+        },
+        name="EEG Live Plot Process",
+    )
+    plot_process.start()
+
+    return plot_queue, plot_start_event, plot_stop_event, plot_process
+
+
+def send_latest_to_plot(plot_queue, plot_start_event, data):
+    if plot_queue is None or plot_start_event is None or not plot_start_event.is_set():
+        return
+
+    try:
+        plot_queue.put_nowait(data)
+    except queue.Full:
+        try:
+            plot_queue.get_nowait()
+        except queue.Empty:
+            pass
+
+        try:
+            plot_queue.put_nowait(data)
+        except queue.Full:
+            pass
+
+
+def stop_live_plot_process(plot_queue, plot_stop_event, plot_process):
+    if plot_stop_event is not None:
+        plot_stop_event.set()
+
+    if plot_process is not None:
+        plot_process.join(timeout=5.0)
+        if plot_process.is_alive():
+            plot_process.terminate()
+            plot_process.join()
+
+    if plot_queue is not None:
+        plot_queue.close()
+        plot_queue.cancel_join_thread()
 
 
 def main():
@@ -13,6 +75,7 @@ def main():
     parser.add_argument("--com-port", type=str, required=True)
     parser.add_argument("--csv-path", type=Path, required=True)
     parser.add_argument("--live-plot-enabled", action="store_true")
+    parser.add_argument("--plot-groups", type=str, required=True)
     args = parser.parse_args()
 
     eeg_config = EEGConfig(com_port=args.com_port)
@@ -25,51 +88,18 @@ def main():
     imp_thread = None
     record_thread = None
 
-    plot_queue = None
-    plot_start_event = None
-    plot_stop_event = None
-    plot_thread = None
+    eeg_plot_groups = [
+        (group_name, channel_indices)
+        for group_name, channel_indices in json.loads(args.plot_groups)
+    ]
 
-    if args.live_plot_enabled:
-        plot_queue = queue.Queue(maxsize=1)
-        plot_start_event = threading.Event()
-        plot_stop_event = threading.Event()
+    plot_queue, plot_start_event, plot_stop_event, plot_process = start_live_plot_process(
+        enabled=args.live_plot_enabled,
+        plot_groups=eeg_plot_groups
+    )
 
-        plot_thread = threading.Thread(
-            target=run_live_plot,
-            kwargs={
-                "plot_queue": plot_queue,
-                "start_event": plot_start_event,
-                "stop_event": plot_stop_event,
-                "channel_labels": EEG_CHANNELS + ["Sync Signal"],
-                "plot_groups": [
-                    ("EEG", list(range(len(EEG_CHANNELS)))),
-                    ("Sync Signal", [len(EEG_CHANNELS)]),
-                ],
-                "window_seconds": 5.0,
-                "title": "EEG",
-            },
-            name="EEG Live Plot",
-            daemon=True,
-        )
-        plot_thread.start()
-
-    def send_latest_to_plot(data):
-        if plot_queue is None or plot_start_event is None or not plot_start_event.is_set():
-            return
-
-        try:
-            plot_queue.put_nowait(data)
-        except queue.Full:
-            try:
-                plot_queue.get_nowait()
-            except queue.Empty:
-                pass
-
-            try:
-                plot_queue.put_nowait(data)
-            except queue.Full:
-                pass
+    def send_to_plot(data):
+        send_latest_to_plot(plot_queue, plot_start_event, data)
 
     for cmd in sys.stdin:
         cmd = cmd.strip()
@@ -105,7 +135,7 @@ def main():
                         "csv_path": Path(args.csv_path),
                         "stop_event": stop_event,
                         "started_event": started_event,
-                        "plot_callback": send_latest_to_plot if args.live_plot_enabled else None,
+                        "plot_callback": send_to_plot if args.live_plot_enabled else None,
                     },
                     name="EEG Recording",
                 )
@@ -122,10 +152,12 @@ def main():
                 stop_event.set()
                 record_thread.join()
                 record_thread = None
-                if plot_stop_event is not None:
-                    plot_stop_event.set()
-                if plot_thread is not None and plot_thread.is_alive():
-                    plot_thread.join(timeout=5.0)
+
+                stop_live_plot_process(plot_queue, plot_stop_event, plot_process)
+                plot_queue = None
+                plot_start_event = None
+                plot_stop_event = None
+                plot_process = None
 
         elif cmd == "EXIT":
             stop_imp.set()
@@ -137,10 +169,7 @@ def main():
             if record_thread is not None and record_thread.is_alive():
                 record_thread.join()
 
-            if plot_stop_event is not None:
-                plot_stop_event.set()
-            if plot_thread is not None and plot_thread.is_alive():
-                plot_thread.join(timeout=5.0)
+            stop_live_plot_process(plot_queue, plot_stop_event, plot_process)
 
             break
 

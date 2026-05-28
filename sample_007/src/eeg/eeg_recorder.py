@@ -5,6 +5,7 @@ import csv
 import time
 from dataclasses import dataclass
 from collections.abc import Callable
+import json
 
 from src.eeg import OrbViewAPI_py313 as orb
 
@@ -17,13 +18,18 @@ PlotData = tuple[list[float], list[list[float]]]
 class EEGConfig:
     com_port: str
 
-    def to_subprocess_args(self, csv_path: Path, live_plot_enabled: bool = False) -> list[str]:
+    def to_subprocess_args(
+            self, csv_path: Path,
+            live_plot_enabled: bool,
+            plot_groups: list[tuple[str, list[int]]]
+            ) -> list[str]:
         args = [
             sys.executable,
             "-m",
             "src.eeg.eeg_processor",
             "--com-port", self.com_port,
             "--csv-path", str(csv_path),
+            "--plot-groups", json.dumps(plot_groups),
         ]
         if live_plot_enabled:
             args.append("--live-plot-enabled")
