@@ -89,6 +89,7 @@ def main():
     # folder for raw data (CSV, WAV, etc.)
     raw_data_folder = Path("output") / "participant01" / "trial01"
 
+    # recording enable/disable
     recording_bool = {
         "NI DAQ": True,
         "Audio": True,
@@ -98,10 +99,28 @@ def main():
         "EEG": False,
     }
 
-    sync_signal_bool = True # Set to False to disable sync signal output
+    # Sync signal output during recording
+    sync_signal_bool = True
 
+    # Live plot enable/disable and settings
+    # NI DAQ live plot settings
     ni_live_plot_enabled = True
+    ni_plot_groups = [
+        ("Tactile Sensors", [0, 1, 2, 3]),
+        ("EMG", [4, 5, 6, 7]),
+        ("Sync Signal", [8]),
+    ]
+
+    # EEG live plot settings
     eeg_live_plot_enabled = True
+    eeg_plot_groups = [
+        ("F", [0, 1, 2]),   # Fp1, Fz, Fp2
+        ("C", [3, 4, 5]),   # C3, Cz, C4
+        ("O", [6, 7]),      # O1, O2
+        ("T", [8, 9]),      # T7, T8
+        ("P", [10]),        # Pz
+        ("Sync Signal", [11]),
+    ]
 
     # NI DAQ
     adc_channel_configs = [
@@ -148,16 +167,13 @@ def main():
     eeg_config = EEGConfig(com_port="COM3")
 
 
-    # === NI Live Plot Process ===
+    # === Live Plot Process ===
+
+    # NI DAQ live plot
     ni_channel_labels = [config.ch_label for config in adc_channel_configs]
-    ni_plot_groups = [
-        ("Tactile Sensors", [0, 1, 2, 3]),
-        ("EMG", [4, 5, 6, 7]),
-        ("Sync Signal", [8]),
-    ]
 
     ni_plot_queue, ni_plot_start_event, ni_plot_stop_event, ni_plot_process = start_live_plot_process(
-        enabled=ni_live_plot_enabled,
+        enabled=ni_live_plot_enabled and recording_bool.get("NI DAQ", False),
         channel_labels=ni_channel_labels,
         plot_groups=ni_plot_groups,
         title="NI DAQ",
@@ -233,6 +249,7 @@ def main():
             eeg_config.to_subprocess_args(
                 csv_path=raw_data_folder / "eeg_data.csv",
                 live_plot_enabled=eeg_live_plot_enabled,
+                plot_groups=eeg_plot_groups,
             ),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -291,7 +308,7 @@ def main():
                 csv_path=raw_data_folder / "ni_data.csv",
                 stop_event=stop_event,
                 started_event=started_event,
-                plot_callback=send_to_ni_plot if ni_live_plot_enabled else None,
+                plot_callback=send_to_ni_plot if ni_live_plot_enabled and recording_bool.get("NI DAQ", False) else None,
             ),
         ),
         (
@@ -384,7 +401,12 @@ def main():
             eeg_process.stdin.flush()
             eeg_process.stdin.write("EXIT\n")
             eeg_process.stdin.flush()
-            eeg_process.wait()
+
+            try:
+                eeg_process.wait(timeout=5.0)
+            except subprocess.TimeoutExpired:
+                eeg_process.terminate()
+                eeg_process.wait(timeout=5.0)
 
         stop_event.set()
         for thread in threads:
