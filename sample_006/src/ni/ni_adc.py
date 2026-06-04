@@ -120,14 +120,14 @@ class NIADC:
 if __name__ == "__main__":
 
     channel_configs = [
-        ChannelConfig(ch="ai0", ch_label="EMG LE", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
-        ChannelConfig(ch="ai1", ch_label="EMG LF", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
-        ChannelConfig(ch="ai2", ch_label="EMG RE", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
-        ChannelConfig(ch="ai3", ch_label="EMG RF", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
-        ChannelConfig(ch="ai8", ch_label="Tactile LI", terminal_config=TerminalConfiguration.RSE, voltage_range=(-2.0, 2.0)),
-        ChannelConfig(ch="ai9", ch_label="Tactile LT", terminal_config=TerminalConfiguration.RSE, voltage_range=(-2.0, 2.0)),
-        ChannelConfig(ch="ai10", ch_label="Tactile RI", terminal_config=TerminalConfiguration.RSE, voltage_range=(-2.0, 2.0)),
-        ChannelConfig(ch="ai11", ch_label="Tactile RT", terminal_config=TerminalConfiguration.RSE, voltage_range=(-2.0, 2.0)),
+        ChannelConfig(ch="ai0", ch_label="Tactile LI", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
+        ChannelConfig(ch="ai1", ch_label="Tactile LT", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
+        ChannelConfig(ch="ai2", ch_label="Tactile RI", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
+        ChannelConfig(ch="ai3", ch_label="Tactile RT", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
+        ChannelConfig(ch="ai8", ch_label="EMG LE", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
+        ChannelConfig(ch="ai9", ch_label="EMG LF", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
+        ChannelConfig(ch="ai10", ch_label="EMG RE", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
+        ChannelConfig(ch="ai11", ch_label="EMG RF", terminal_config=TerminalConfiguration.RSE, voltage_range=(-5.0, 5.0)),
         ChannelConfig(ch="ai12", ch_label="Sync Signal", terminal_config=TerminalConfiguration.RSE, voltage_range=(-0.5, 5.0))
     ]
 
