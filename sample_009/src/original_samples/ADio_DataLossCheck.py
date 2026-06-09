@@ -45,7 +45,7 @@ from ADio_Utils import (
     list_ftdi_serials
 )
 import ftd2xx.defines as fd
-from collections import defaultdict #冗長 l.37と一緒
+from collections import defaultdict
 
 
 logging_queue = Queue()
@@ -71,7 +71,7 @@ TARGET_SERIAL = "FT9YKFGE"
 FS_KSPS = 16
 CHUNK_RATE_HZ = 200
 REQUEST_DATA_NUM = 9
-RECORD_SECONDS = 15 # 長くしたい（10分とか）、できれば時間を指定せずに任意のタイミングで停止したい
+RECORD_SECONDS = 15
 
 SIGNAL_FREQ = 500
 SIGNAL_AMP = 4.5
@@ -210,7 +210,7 @@ def receive_data(handle):
     try:
         while running or handle.getQueueStatus() > 0:
             try:
-                line = read_exact(handle, total_size, timeout=0.5) # 次のバッファが貯まるまで待っている？
+                line = read_exact(handle, total_size, timeout=0.5)
                 if not line:
                     if not running:
                         idle_after_stop += 1
@@ -340,7 +340,7 @@ def logging_loop():
 
 
 
-def send_data_request_loop(handle, cmds, first_interval, repeat_interval): # 使っていない
+def send_data_request_loop(handle, cmds, first_interval, repeat_interval):
     print("データ要求送信中...(最初: {}秒、その後: {}秒ごと)".format(first_interval, repeat_interval))
 
     # 最初の送信はmain()で済ませている前提
@@ -449,7 +449,7 @@ def main():
 
         # --- 一括送信（1回のwriteで全部） ---
         print("送信要求コマンド送信")
-        handle.write(cmds.encode()) # なぜthread立ち上げた後に記載しているのか？
+        handle.write(cmds.encode())
 
         print(f"[MAIN] {RECORD_SECONDS}秒間記録します")
         print("[MAIN] Ctrl+Cで途中終了できます")
