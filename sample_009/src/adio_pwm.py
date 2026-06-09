@@ -140,6 +140,7 @@ if __name__ == "__main__":
 
     io = ADioTransport(serial="FT9IK4VX")
     io.open()
+    io.reset_all()
     
     pwm = ADioPWM(io, adio_pwm_config)
 

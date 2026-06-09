@@ -25,7 +25,7 @@ class ADioTransport:
         self.handle: Optional[ftd2xx.FTD2XX] = None
 
         self.cmd_lock = threading.Lock()
-        
+
         self._rx_buf = bytearray()
 
     @staticmethod
@@ -116,27 +116,6 @@ class ADioTransport:
                 time.sleep(0.001)
 
         return None
-    
-    def read_exact(self, size: int, timeout: float = 1.0) -> Optional[bytes]:
-        """
-        Read exactly `size` bytes from the device within the specified timeout.
-        """
-        buf = bytearray()
-        deadline = time.time() + timeout
-
-        while len(buf) < size:
-            if time.time() >= deadline:
-                print(f"[TIMEOUT] read_exact {len(buf)}/{size} bytes")
-                return None
-
-            n = self.handle.getQueueStatus()
-            if n > 0:
-                to_read = min(size - len(buf), n)
-                buf.extend(self.handle.read(to_read))
-            else:
-                time.sleep(0.001)
-
-        return bytes(buf)
     
     def write(self, command: str) -> None:
         """

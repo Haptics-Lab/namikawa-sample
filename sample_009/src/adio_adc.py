@@ -73,10 +73,6 @@ class ADioADC:
         self.logger_ready = threading.Event()
         self.recv_chunk_index = defaultdict(int)
         self.running = False
-
-    @property
-    def total_size(self) -> int:
-        return self.config.chunk_size * 5 + 7
     
     @staticmethod
     def raw_to_voltage(raw: int, input_range: float = 5.0) -> float:
@@ -188,7 +184,7 @@ class ADioADC:
                 line = line.strip(b"\r\n")
 
                 if not (line.startswith(b"*40") and line.endswith(b"#")):
-                    print(f"[WARN] invalid ADC packet: {line[:10]!r}...{line[-10:]!r}")
+                    print(f"[WARN] invalid ADC packet: {line[:10]!r}")
                     continue
 
                 ch = int(line[3:4], 16)
@@ -340,9 +336,6 @@ class ADioADC:
 
             self.set_sampling_rate()
             self.start_accum_all()
-
-            self.io.write("*40010001#") # Dummy
-            self.io.flush_input_buffer()
 
             writer = threading.Thread(target=self.writer_thread, args=(csv_path,), name="ADioADCWriter", daemon=False)
             writer.start()
