@@ -178,16 +178,17 @@ class ADioADC:
 
         try:
             while self.running or self.io.bytes_available > 0:
-                line = self.io.read_exact(self.total_size, timeout=0.5)
+                line = self.io.read_until_hash(timeout=0.5)
 
                 if line is None:
                     if not self.running:
                         break
                     continue
 
-                line = line.rstrip(b"\r\n")
+                line = line.strip(b"\r\n")
 
                 if not (line.startswith(b"*40") and line.endswith(b"#")):
+                    print(f"[WARN] invalid ADC packet: {line[:10]!r}...{line[-10:]!r}")
                     continue
 
                 ch = int(line[3:4], 16)
@@ -316,6 +317,7 @@ class ADioADC:
             self,
             csv_path: Path,
             stop_event: threading.Event,
+            started_event: threading.Event,
             ):
         self._reset_state()
         self.running = True
@@ -332,8 +334,6 @@ class ADioADC:
         send_thread = None
 
         try:
-            self.io.reset_all()
-
             for ch in range(self.config.request_channel_count):
                 self.set_chunk_size(ch, self.config.chunk_size)
                 self.set_input_range(ch, self.config.input_range)
@@ -366,6 +366,7 @@ class ADioADC:
             print("Started streaming data with ADio ADC.")
             print(f"    Writing to {csv_path}")
             print(f"    Requesting data...({self.config.request_interval:.3f}s interval)")
+            started_event.set()
 
             stop_event.wait()
 
@@ -413,21 +414,25 @@ if __name__ == "__main__":
 
     io = ADioTransport(serial="FT9IK4VX")
     io.open()
+    io.reset_all()
 
     try:
         adc = ADioADC(transport=io, config=adio_adc_config)
 
         stop_event = threading.Event()
+        started_event = threading.Event()
         thread = threading.Thread(
             target=adc.stream_to_csv,
             kwargs={
                 "csv_path": Path("output") / "adio_data.csv",
                 "stop_event": stop_event,
+                "started_event": started_event,
             },
             daemon=False,
         )
 
         thread.start()
+        started_event.wait()
 
         try:
             input("Press Enter to stop recording...\n")

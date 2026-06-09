@@ -35,11 +35,13 @@ def main():
 
     io = ADioTransport(serial="FT9IK4VX")
     io.open()
+    io.reset_all()
 
     sync_start_event = threading.Event()
     sync_stop_event = threading.Event()
 
     adc_stop_event = threading.Event()
+    adc_started_event = threading.Event()
 
     pwm = ADioPWM(io, adio_pwm_config)
     adc = ADioADC(transport=io, config=adio_adc_config)
@@ -54,18 +56,20 @@ def main():
         daemon=False,
     )
 
-    sync_thread.start()
-
     adc_thread = threading.Thread(
         target=adc.stream_to_csv,
         kwargs={
             "csv_path": Path("output") / "adio_data.csv",
             "stop_event": adc_stop_event,
+            "started_event": adc_started_event
         },
         daemon=False,
     )
 
+    sync_thread.start()
+
     adc_thread.start()
+    adc_started_event.wait()
 
     input("Press Enter to start sync signal...\n")
     sync_start_event.set()

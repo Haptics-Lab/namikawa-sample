@@ -1,4 +1,5 @@
 import time
+import threading
 from typing import Optional
 
 import ftd2xx
@@ -22,6 +23,10 @@ class ADioTransport:
         self.usb_in_kb: int = usb_in_kb
         self.usb_out_kb: int = usb_out_kb
         self.handle: Optional[ftd2xx.FTD2XX] = None
+
+        self.cmd_lock = threading.Lock()
+        
+        self._rx_buf = bytearray()
 
     @staticmethod
     def list_serials() -> list[str]:
@@ -96,14 +101,17 @@ class ADioTransport:
         Read a line ending with '#' from the device within the specified timeout.
         """
         deadline = time.time() + timeout
-        buf = bytearray()
 
         while time.time() < deadline:
-            if self.handle.getQueueStatus() > 0:
-                buf.extend(self.handle.read(1))
+            hash_pos = self._rx_buf.find(b"#")
+            if hash_pos >= 0:
+                packet = bytes(self._rx_buf[:hash_pos + 1])
+                del self._rx_buf[:hash_pos + 1]
+                return packet
 
-                if buf.endswith(b"#"):
-                    return bytes(buf)
+            n = self.handle.getQueueStatus()
+            if n > 0:
+                self._rx_buf.extend(self.handle.read(n))
             else:
                 time.sleep(0.001)
 
@@ -140,16 +148,17 @@ class ADioTransport:
         """
         Send a command to the device and wait for a response.
         """
-        self.write(command)
+        with self.cmd_lock:
+            self.write(command)
 
-        resp = self.read_until_hash(timeout)
+            resp = self.read_until_hash(timeout)
 
-        if resp is None:
-            raise TimeoutError(
-                f"Timeout waiting for response to {command}"
-            )
+            if resp is None:
+                raise TimeoutError(
+                    f"Timeout waiting for response to {command}"
+                )
 
-        return resp.decode(errors="ignore").strip()
+            return resp.decode(errors="ignore").strip()
     
     @property
     def bytes_available(self) -> int:
