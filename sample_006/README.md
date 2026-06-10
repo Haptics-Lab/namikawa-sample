@@ -114,16 +114,16 @@ io = ADioTransport(serial="FT9IK4VX")
 print(ADioTransport.list_serials())
 ```
 
-### 5. Audio
+### 6. Audio
 デバイス番号、サンプリング周波数、チャンネル数を設定します。
 ```python
 audio_recorder = AudioRecorder(device=5, sample_rate=44100, channels=2, blocksize=1024)
 ```
 
-### 6. カメラ（MocapForAll）
+### 7. カメラ（MocapForAll）
 カメラ番号・解像度・fps を CameraConfig で指定します。
 
-### 7. Motive / NatNet
+### 8. Motive / NatNet
 Motive 側設定に合わせて client_ip、server_ip、use_multicast を設定します。
 ```python
 natnet_config = NatNetConfig(
@@ -133,14 +133,14 @@ natnet_config = NatNetConfig(
 )
 ```
 
-### 8. EEG
+### 9. EEG
 接続 COM ポートを設定します。
 ```python
 eeg_config = EEGConfig(com_port="COM3")
 ```
 
 ## 実行
-sample_006/ で以下を実行します。
+`sample_006/` で以下を実行します。
 
 ```bash
 uv run main.py
@@ -163,9 +163,10 @@ uv run main.py
 ## 出力ファイル例
 設定と有効化状況に応じて、例えば以下が出力されます。
 
-- ni_data.csv
-- audio_data.wav
-- eeg_data.csv
-- mfa/（カメラ動画）
-- motive/marker_sets/*.csv
-- motive/rigid_bodies/*.csv
+- `ni_data.csv`
+- `adio_data.csv`
+- `audio_data.wav`
+- `eeg_data.csv`
+- `mfa/`（カメラ動画）
+- `motive/marker_sets/*.csv`
+- `motive/rigid_bodies/*.csv`
