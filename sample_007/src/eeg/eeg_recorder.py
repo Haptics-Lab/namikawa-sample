@@ -7,8 +7,6 @@ from dataclasses import dataclass
 from collections.abc import Callable
 import json
 
-from src.eeg import OrbViewAPI_py313 as orb
-
 
 EEG_CHANNELS = ["Fp1", "Fz", "Fp2", "C3", "Cz", "C4", "O1", "O2", "T8", "T7", "Pz"]
 PlotData = tuple[list[float], list[list[float]]]
@@ -38,6 +36,8 @@ class EEGConfig:
 
 class EEGRecorder:
     def __init__(self, com_port: str):
+        from src.eeg import OrbViewAPI_py313 as orb
+        
         self.com_port = com_port
         self.fs = 1000
         self.oif = orb.OIF()
