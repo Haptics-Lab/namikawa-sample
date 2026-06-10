@@ -1,7 +1,8 @@
 ## サンプル内容
-NI DAQ、マイク、カメラ（MocapForAll）、Motive（NatNet）、脳波測定装置を同時に使用して、複数のセンサからデータを並列取得・保存するプログラム。
+NI DAQ、ADio、マイク、カメラ（MocapForAll）、Motive（NatNet）、脳波測定装置を同時に使用して、複数のセンサからデータを並列取得・保存するプログラム。
 
 - **NI DAQ** : アナログ入力チャンネルのデータをCSVに保存（sample_002 ベース）
+- **ADio** : アナログ入力チャンネルのデータをCSVに保存（sample_009 ベース）
 - **Audio** : マイクで録音し、WAVファイルに保存（sample_003 ベース）
 - **MocapForAll Cameras** : 複数カメラで録画し、MP4ファイルに保存（sample_004 ベース）
 - **Motive** : marker set および rigid body のデータをCSVに保存（sample_005 ベース）
@@ -9,7 +10,7 @@ NI DAQ、マイク、カメラ（MocapForAll）、Motive（NatNet）、脳波測
 
 
 各 recorder は別スレッドで動作し、共通の stop 制御で一斉停止します。  
-EEG はサブプロセス（src.eeg.eeg_processor）として起動し、標準入力コマンドで制御します。
+EEG はサブプロセス（`src.eeg.eeg_processor`）として起動し、標準入力コマンドで制御します。
 
 ## ディレクトリ構成
 ```
@@ -19,6 +20,10 @@ sample_006/
 │   ├── ni/
 │   │   ├── ni_adc.py
 │   │   └── ni_counter.py
+│   ├── adio/
+│   │   ├── adio_adc.py
+│   │   ├── adio_pwm.py
+│   │   └── adio_transport.py
 │   ├── audio/
 │   │   └── audio_recorder.py
 │   ├── mfa/
@@ -42,10 +47,11 @@ OS は Windows を想定しています。
 必要に応じて以下を準備してください。
 
 - NI-DAQmx driver
+- FTDI D2XX driver
 - Motive 側の NatNet Streaming 設定（IP / unicast または multicast）
 - EEG 機器ドライバ・通信環境（COM ポート確認）
 
-sample_006/ をコピーして以下を実行します。
+`sample_006/` をコピーして以下を実行します。
 
 ```bash
 uv sync
@@ -63,6 +69,7 @@ raw_data_folder = Path("output") / "participant01" / "trial01"
 ```python
 recording_bool = {
 	"NI DAQ": True,
+	"ADio DAQ": False,
 	"Audio": True,
 	"MocapForAll Cameras": False,
 	"Motive MarkerSets": False,
@@ -71,10 +78,10 @@ recording_bool = {
 }
 ```
 
-### 3. 同期信号（NI Counter）
-同期信号出力の有効/無効を切り替えます。
+### 3. 同期信号
+同期信号出力の有効/無効、出力デバイスを切り替えます。
 ```python
-sync_signal_bool = True
+sync_signal_mode: Optional[str] = None # None, "NI", or "ADio"
 ```
 
 ### 4. NI DAQ
@@ -85,6 +92,26 @@ ni_adc = NIADC(
 	sampling_rate=16000.0,
 	...
 )
+```
+
+### 5. ADio
+サンプリング周波数、データ要求周期、対象チャンネル、入力レンジを設定します。
+```python
+adio_adc_config = ADioADCConfig(
+	fs=16000,
+	chunk_rate_hz=200,
+	request_chunks_per_command=50,
+	...
+)
+```
+
+デバイスのシリアルを設定します。
+```python
+io = ADioTransport(serial="FT9IK4VX")
+```
+シリアル番号は下記のプログラムで確認できます。
+```python
+print(ADioTransport.list_serials())
 ```
 
 ### 5. Audio
