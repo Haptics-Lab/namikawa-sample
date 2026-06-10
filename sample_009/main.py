@@ -9,7 +9,7 @@ from src.adio_transport import ADioTransport
 def main():
     adio_pwm_config = ADioPWMConfig(
         gpio_bit=0,
-        freq_hz=0,
+        freq_hz=1,
         duty=0.40,
     )
 
