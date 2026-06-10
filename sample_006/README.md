@@ -1,8 +1,9 @@
 ## サンプル内容
-NI DAQ、ADio、マイク、カメラ（MocapForAll）、Motive（NatNet）、脳波測定装置を同時に使用して、複数のセンサからデータを並列取得・保存するプログラム。
+NI DAQ、ADio DAQ、マイク、カメラ（MocapForAll）、Motive（NatNet）、脳波測定装置を同時に使用して、複数のセンサからデータを並列取得・保存するプログラム。  
+NIまたはADioで同期信号を出力することも可能です。
 
 - **NI DAQ** : アナログ入力チャンネルのデータをCSVに保存（sample_002 ベース）
-- **ADio** : アナログ入力チャンネルのデータをCSVに保存（sample_009 ベース）
+- **ADio DAQ** : アナログ入力チャンネルのデータをCSVに保存（sample_009 ベース）
 - **Audio** : マイクで録音し、WAVファイルに保存（sample_003 ベース）
 - **MocapForAll Cameras** : 複数カメラで録画し、MP4ファイルに保存（sample_004 ベース）
 - **Motive** : marker set および rigid body のデータをCSVに保存（sample_005 ベース）
