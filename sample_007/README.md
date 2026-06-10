@@ -1,8 +1,9 @@
 ## サンプル内容
-NI DAQ、マイク、カメラ（MocapForAll）、Motive（NatNet）、脳波測定装置を同時に使用して、複数のセンサからデータを並列取得・保存するプログラム。  
+NI DAQ、ADio、マイク、カメラ（MocapForAll）、Motive（NatNet）、脳波測定装置を同時に使用して、複数のセンサからデータを並列取得・保存するプログラム。  
 NI DAQと脳波測定装置で記録しているデータをプロットします。
 
 - **NI DAQ** : アナログ入力チャンネルのデータをCSVに保存（sample_002 ベース）
+- **ADio** : アナログ入力チャンネルのデータをCSVに保存（sample_009 ベース）
 - **Audio** : マイクで録音し、WAVファイルに保存（sample_003 ベース）
 - **MocapForAll Cameras** : 複数カメラで録画し、MP4ファイルに保存（sample_004 ベース）
 - **Motive** : marker set および rigid body のデータをCSVに保存（sample_005 ベース）
@@ -24,6 +25,10 @@ sample_007/
 │   ├── ni/
 │   │   ├── ni_adc.py
 │   │   └── ni_counter.py
+│   ├── adio/
+│   │   ├── adio_adc.py
+│   │   ├── adio_pwm.py
+│   │   └── adio_transport.py
 │   ├── audio/
 │   │   └── audio_recorder.py
 │   ├── mfa/
@@ -50,6 +55,7 @@ OS は Windows を想定しています。
 必要に応じて以下を準備してください。
 
 - NI-DAQmx driver
+- FTDI D2XX driver
 - Motive 側の NatNet Streaming 設定（IP / unicast または multicast）
 - EEG 機器ドライバ・通信環境（COM ポート確認）
 
@@ -71,6 +77,7 @@ raw_data_folder = Path("output") / "participant01" / "trial01"
 ```python
 recording_bool = {
 	"NI DAQ": True,
+	"ADio DAQ": False,
 	"Audio": True,
 	"MocapForAll Cameras": False,
 	"Motive MarkerSets": False,
@@ -79,14 +86,21 @@ recording_bool = {
 }
 ```
 
-### 3. プロット
-NI と EEG それぞれで ON/OFF と表示グループを設定できます。
+### 3. 同期信号
+同期信号出力の有効/無効、出力デバイスを切り替えます。
+```python
+sync_signal_mode: Optional[str] = None # None, "NI", or "ADio"
+```
+
+### 4. プロット
+NI と ADio と EEG それぞれで ON/OFF と表示グループを設定できます。
 ```python
 ni_live_plot_enabled = True
+adio_live_plot_enabled = True
 eeg_live_plot_enabled = True
 ```
 
-### 4. NI DAQ
+### 5. NI DAQ
 使用チャネル、ラベル、電圧レンジ、デバイス名、サンプリング周波数を設定します。
 ```python
 ni_adc = NIADC(
@@ -96,16 +110,36 @@ ni_adc = NIADC(
 )
 ```
 
-### 5. Audio
+### 6. ADio
+サンプリング周波数、データ要求周期、対象チャンネル、入力レンジを設定します。
+```python
+adio_adc_config = ADioADCConfig(
+	fs=16000,
+	chunk_rate_hz=200,
+	request_chunks_per_command=50,
+	...
+)
+```
+
+デバイスのシリアルを設定します。
+```python
+io = ADioTransport(serial="FT9IK4VX")
+```
+シリアル番号は下記のプログラムで確認できます。
+```python
+print(ADioTransport.list_serials())
+```
+
+### 7. Audio
 デバイス番号、サンプリング周波数、チャンネル数を設定します。
 ```python
 audio_recorder = AudioRecorder(device=5, sample_rate=44100, channels=2, blocksize=1024)
 ```
 
-### 6. カメラ（MocapForAll）
+### 8. カメラ（MocapForAll）
 カメラ番号・解像度・fps を `CameraConfig` で指定します。
 
-### 7. Motive / NatNet
+### 9. Motive / NatNet
 Motive 側設定に合わせて `client_ip`、`server_ip`、`use_multicast` を設定します。
 ```python
 natnet_config = NatNetConfig(
@@ -115,14 +149,12 @@ natnet_config = NatNetConfig(
 )
 ```
 
-### 8. EEG
+### 10. EEG
 接続 COM ポートを設定します。
 ```python
 eeg_config = EEGConfig(com_port="COM3")
 ```
 
-### 9. 同期信号（NI Counter）
-`sync_signal_bool = True` の場合、記録中に同期信号を出力します。
 
 ## 実行
 `sample_007/` で以下を実行します。
@@ -150,6 +182,7 @@ uv run main.py
 設定と有効化状況に応じて、例えば以下が出力されます。
 
 - `ni_data.csv`
+- `adio_data.csv`
 - `audio_data.wav`
 - `eeg_data.csv`
 - `mfa/`（カメラ動画）
