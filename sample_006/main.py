@@ -3,9 +3,13 @@ import threading
 from functools import partial
 import time
 import subprocess
+from typing import Optional
 
 from src.ni.ni_adc import NIADC, ChannelConfig as ADCChannelConfig, TerminalConfiguration
 from src.ni.ni_counter import NICounter, ChannelConfig as CounterChannelConfig
+from src.adio.adio_adc import ADioADC, ADioADCConfig
+from src.adio.adio_pwm import ADioPWM, ADioPWMConfig, ADioPWMSegment
+from src.adio.adio_transport import ADioTransport
 from src.audio.audio_recorder import AudioRecorder
 from src.mfa.camera_recorder import CameraConfig, MultiCameraRecorder
 from src.motive.natnet_stream import NatNetConfig
@@ -21,8 +25,10 @@ def main():
     # folder for raw data (CSV, WAV, etc.)
     raw_data_folder = Path("output") / "participant01" / "trial01"
 
+    # recording enable/disable
     recording_bool = {
         "NI DAQ": True,
+        "ADio DAQ": False,
         "Audio": True,
         "MocapForAll Cameras": False,
         "Motive MarkerSets": False,
@@ -30,7 +36,8 @@ def main():
         "EEG": True,
     }
 
-    sync_signal_bool = True # Set to False to disable sync signal output
+    # Sync signal output during recording
+    sync_signal_mode: Optional[str] = None # None, "NI", or "ADio"
 
     # NI DAQ
     adc_channel_configs = [
@@ -52,6 +59,28 @@ def main():
         samples_per_read=2048,
         channel_configs=adc_channel_configs
     )
+
+    # ADio DAQ
+    adio_config = ADioADCConfig(
+        fs=16000,
+        chunk_rate_hz=200,
+        request_chunks_per_command=50,
+        channels={
+            0: "Tactile LI",
+            1: "Tactile LT",
+            2: "Tactile RI",
+            3: "Tactile RT",
+            5: "EMG LE",
+            6: "EMG LF",
+            7: "EMG RE",
+            8: "EMG RF",
+            10: "Sync Signal"
+        },
+        input_range=5.0
+    )
+
+    adio_io = ADioTransport(serial="FT9IK4VX")
+    adio_adc = ADioADC(transport=adio_io, config=adio_config)
 
     # Audio Recorder
     audio_recorder = AudioRecorder(device=5, sample_rate=44100, channels=2, blocksize=1024)
@@ -77,35 +106,60 @@ def main():
     eeg_config = EEGConfig(com_port="COM3")
 
 
+    # === ADio Initialization ===
+    if recording_bool.get("ADio DAQ", False) or sync_signal_mode == "ADio":
+        adio_io.open()
+        adio_io.reset_all()
+
     # === Sync Signal ===
-    if sync_signal_bool:
-        ni_counter = NICounter(device_name="Dev1")
+    if sync_signal_mode not in (None, "NI", "ADio"):
+        raise ValueError(f"Invalid sync_signal_mode: {sync_signal_mode}")
+    
+    if sync_signal_mode is not None:
+        if sync_signal_mode == "NI":
+            ni_counter = NICounter(device_name="Dev1")
+
+        elif sync_signal_mode == "ADio":
+            adio_pwm_config = ADioPWMConfig(bit=0, idle_state=0)
+            adio_pwm = ADioPWM(adio_io, adio_pwm_config)
+
         sync_start_event = threading.Event()
         sync_stop_event = threading.Event()
         sync_thread_error: list[Exception] = []
 
     def output_sync_sequence():
         try:
-            ni_counter.output_sync_signal(
-                ch_configs=[
-                    CounterChannelConfig(ch="ctr0", freq=1.0, duty_cycle=0.2),
-                ],
-                start_event=sync_start_event,
-                stop_event=sync_stop_event,
-                duration_s=3.5,
-            )
+            if sync_signal_mode == "NI":
+                ni_counter.output_sync_signal(
+                    ch_configs=[
+                        CounterChannelConfig(ch="ctr0", freq=1.0, duty_cycle=0.2),
+                    ],
+                    start_event=sync_start_event,
+                    stop_event=sync_stop_event,
+                    duration_s=3.5,
+                )
 
-            if sync_stop_event.is_set():
-                return
+                if sync_stop_event.is_set():
+                    return
 
-            # Continue the sync signal until sync_stop_event is set.
-            ni_counter.output_sync_signal(
-                ch_configs=[
-                    CounterChannelConfig(ch="ctr0", freq=1.0, duty_cycle=0.4),
-                ],
-                start_event=sync_start_event,
-                stop_event=sync_stop_event,
-            )
+                # Continue the sync signal until sync_stop_event is set.
+                ni_counter.output_sync_signal(
+                    ch_configs=[
+                        CounterChannelConfig(ch="ctr0", freq=1.0, duty_cycle=0.4),
+                    ],
+                    start_event=sync_start_event,
+                    stop_event=sync_stop_event,
+                )
+
+            elif sync_signal_mode == "ADio":
+                adio_pwm.output_sync_sequence(
+                    segments=[
+                        ADioPWMSegment(freq_hz=0, duty=0.2, duration_s=3.5),
+                        ADioPWMSegment(freq_hz=0, duty=0.4, duration_s=None),
+                    ],
+                    start_event=sync_start_event,
+                    stop_event=sync_stop_event,
+                )
         except Exception as exc:
             sync_thread_error.append(exc)
             sync_stop_event.set()
@@ -113,11 +167,11 @@ def main():
 
     # === Run Workers ===
 
-    # prepare NI counter thread and start it
-    if sync_signal_bool:
+    # prepare sync signal thread and start it
+    if sync_signal_mode is not None:
         sync_thread = threading.Thread(
             target=output_sync_sequence,
-            name="NI Counter Sync Signal",
+            name="Counter Sync Signal",
         )
         sync_thread.start()
 
@@ -203,6 +257,14 @@ def main():
             ),
         ),
         (
+            "ADio DAQ",
+            lambda started_event: adio_adc.stream_to_csv(
+                csv_path=raw_data_folder / "adio_data.csv",
+                stop_event=stop_event,
+                started_event=started_event,
+            ),
+        ),
+        (
             "Audio",
             lambda started_event: audio_recorder.record(
                 wav_path=raw_data_folder / "audio_data.wav",
@@ -267,7 +329,7 @@ def main():
 
         if not stop_event.is_set():
             print("All recorders started.\n")
-            if sync_signal_bool:
+            if sync_signal_mode is not None:
                 sync_start_event.set()
                 input("Press Enter to stop sync signal and finish recordings...\n")
                 sync_stop_event.set()
@@ -280,7 +342,7 @@ def main():
     except KeyboardInterrupt:
         print("\nKeyboardInterrupt received. Stopping all recordings...")
     finally:
-        if sync_signal_bool:
+        if sync_signal_mode is not None:
             sync_stop_event.set()
             if sync_thread.is_alive():
                 sync_thread.join()
@@ -296,7 +358,7 @@ def main():
         for thread in threads:
             thread.join()
 
-    if sync_signal_bool and sync_thread_error:
+    if sync_signal_mode is not None and sync_thread_error:
         raise RuntimeError("Sync failed.") from sync_thread_error[0]
 
     if worker_errors:
