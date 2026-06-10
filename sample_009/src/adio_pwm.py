@@ -9,7 +9,7 @@ class ADioPWMConfig:
     """
     Configuration for PWM measurement.
     """
-    bit: int            # 0..7 (D0..D7)
+    gpio_bit: int       # 0..7 (D0..D7)
     freq_hz: int        # 0..4095 (1Hz step)
     duty: float         # 0.0..1.0
 
@@ -25,8 +25,8 @@ class ADioPWM:
             ) -> None:
         self.io = transport
         self.config = config
-        self.set_dir_output(self.config.bit)        # must be output for PWM to work
-        self.set_pwm_mode(self.config.bit, True)    # select PWM mode
+        self.set_dir_output(self.config.gpio_bit)        # must be output for PWM to work
+        self.set_pwm_mode(self.config.gpio_bit, True)    # select PWM mode
 
     @staticmethod
     def _bit_mask(bit: int) -> int:
@@ -94,23 +94,23 @@ class ADioPWM:
             raise RuntimeError(f"PWM duty set failed: {resp!r}")
 
     def hold_low(self, bit: Optional[int] = None) -> None:
-        bit = bit if bit is not None else self.config.bit
+        bit = bit if bit is not None else self.config.gpio_bit
         self.set_pwm_duty(bit, 0.0)
 
     def hold_high(self, bit: Optional[int] = None) -> None:
-        bit = bit if bit is not None else self.config.bit
+        bit = bit if bit is not None else self.config.gpio_bit
         self.set_pwm_duty(bit, 1.0)
 
     def output_signal(self) -> None:
         """
         PWM output.
         """
-        self.set_pwm_frequency(self.config.bit, self.config.freq_hz)
-        self.set_pwm_duty(self.config.bit, self.config.duty)
+        self.set_pwm_frequency(self.config.gpio_bit, self.config.freq_hz)
+        self.set_pwm_duty(self.config.gpio_bit, self.config.duty)
 
 
 if __name__ == "__main__":
-    adio_pwm_config = ADioPWMConfig(bit=0, freq_hz=0, duty=0.40)
+    adio_pwm_config = ADioPWMConfig(gpio_bit=0, freq_hz=0, duty=0.40)
 
     io = ADioTransport(serial="FT9IK4VX")
     io.open()

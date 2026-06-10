@@ -8,10 +8,9 @@ from src.adio_transport import ADioTransport
 
 def main():
     adio_pwm_config = ADioPWMConfig(
-        bit=0,
+        gpio_bit=0,
         freq_hz=0,
         duty=0.40,
-        idle_state=0
     )
 
     adio_adc_config = ADioADCConfig(
@@ -46,4 +45,6 @@ def main():
     io.close()
 
 if __name__ == "__main__":
+    print(ADioTransport.list_serials())
+
     main()
