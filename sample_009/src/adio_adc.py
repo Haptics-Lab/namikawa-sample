@@ -312,8 +312,6 @@ class ADioADC:
     def stream_to_csv(
             self,
             csv_path: Path,
-            stop_event: threading.Event,
-            started_event: threading.Event,
             ):
         self._reset_state()
         self.running = True
@@ -358,10 +356,9 @@ class ADioADC:
 
             print("Started streaming data with ADio ADC.")
             print(f"    Writing to {csv_path}")
-            print(f"    Requesting data...({self.config.request_interval:.3f}s interval)")
-            started_event.set()
+            print(f"    Requesting data...({self.config.request_interval:.3f}s interval)\n")
 
-            stop_event.wait()
+            input("Press Enter to stop...")
 
         finally:
             self.running = False
@@ -408,32 +405,9 @@ if __name__ == "__main__":
     io = ADioTransport(serial="FT9IK4VX")
     io.open()
     io.reset_all()
+    
+    adc = ADioADC(transport=io, config=adio_adc_config)
 
-    try:
-        adc = ADioADC(transport=io, config=adio_adc_config)
-
-        stop_event = threading.Event()
-        started_event = threading.Event()
-        thread = threading.Thread(
-            target=adc.stream_to_csv,
-            kwargs={
-                "csv_path": Path("output") / "adio_data.csv",
-                "stop_event": stop_event,
-                "started_event": started_event,
-            },
-            daemon=False,
-        )
-
-        thread.start()
-        started_event.wait()
-
-        try:
-            input("Press Enter to stop recording...\n")
-        except KeyboardInterrupt:
-            print("Ctrl+C was detected. Stopping...\n")
-        finally:
-            stop_event.set()
-            thread.join()
-    finally:
-        io.reset_all()
-        io.close()
+    adc.stream_to_csv(Path("output") / "adio_data.csv")
+    
+    io.close()

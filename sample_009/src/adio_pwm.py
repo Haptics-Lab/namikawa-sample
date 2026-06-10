@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-import threading
 from typing import Optional
 
 from src.adio_transport import ADioTransport
@@ -13,7 +12,6 @@ class ADioPWMConfig:
     bit: int            # 0..7 (D0..D7)
     freq_hz: int        # 0..4095 (1Hz step)
     duty: float         # 0.0..1.0
-    idle_state: int = 0 # 0=LOW, 1=HIGH
 
 
 class ADioPWM:
@@ -103,66 +101,28 @@ class ADioPWM:
         bit = bit if bit is not None else self.config.bit
         self.set_pwm_duty(bit, 1.0)
 
-    def output_sync_signal(
-            self,
-            start_event: threading.Event,
-            stop_event: threading.Event,
-            duration_s: float | None = None
-            ) -> None:
+    def output_signal(self) -> None:
         """
-        Convenience method: configure and start PWM output.
+        PWM output.
         """
-        if self.config.idle_state == 0:
-            self.hold_low()
-        elif self.config.idle_state == 1:
-            self.hold_high()
-        else:
-            raise ValueError("idle_state must be 0 (LOW) or 1 (HIGH)")
+        self.set_pwm_frequency(self.config.bit, self.config.freq_hz)
+        self.set_pwm_duty(self.config.bit, self.config.duty)
 
-        start_event.wait()
-
-        try:
-            self.set_pwm_frequency(self.config.bit, self.config.freq_hz)
-            self.set_pwm_duty(self.config.bit, self.config.duty)
-
-            if duration_s is None:
-                stop_event.wait()
-            else:
-                stop_event.wait(timeout=duration_s)
-        finally:
-            if self.config.idle_state == 0:
-                self.hold_low()
-            else:
-                self.hold_high()
 
 if __name__ == "__main__":
-    adio_pwm_config = ADioPWMConfig(bit=0, freq_hz=0, duty=0.40, idle_state=0)
+    adio_pwm_config = ADioPWMConfig(bit=0, freq_hz=0, duty=0.40)
 
     io = ADioTransport(serial="FT9IK4VX")
     io.open()
     io.reset_all()
     
     pwm = ADioPWM(io, adio_pwm_config)
+    pwm.output_signal()
 
-    start_event = threading.Event()
-    stop_event = threading.Event()
-    thread = threading.Thread(
-        target=pwm.output_sync_signal,
-        kwargs={
-            "start_event": start_event,
-            "stop_event": stop_event,
-            "duration_s": None
-        },
-        daemon=False,
-    )
-    
-    thread.start()
+    import time
+    time.sleep(5)
 
-    input("Press Enter to start sync signal...\n")
-    start_event.set()
-        
-    input("Press Enter to stop sync signal...\n")
-    stop_event.set()
-    
-    thread.join()
+    pwm.hold_low()
+
     io.close()
+    
