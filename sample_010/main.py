@@ -66,7 +66,11 @@ def main() -> None:
     io.open()
 
     try:
+        one_finger(io, finger="LI")
         one_finger(io, finger="LT")
+        one_finger(io, finger="RI")
+        one_finger(io, finger="RT")
+
     finally:
         io.close()
 

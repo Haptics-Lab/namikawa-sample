@@ -186,7 +186,8 @@ class ADioADC:
                 line = line.strip(b"\r\n")
 
                 if not (line.startswith(b"*40") and line.endswith(b"#")):
-                    print(f"[WARN] invalid ADC packet: {line[:10]!r}")
+                    if line != b'*OK#':
+                        print(f"[WARN] invalid ADC packet: {line[:10]!r}")
                     continue
 
                 ch = int(line[3:4], 16)
@@ -404,4 +405,4 @@ class ADioADC:
             if writer is not None and writer.is_alive():
                 writer.join(timeout=5.0)
 
-            print("Stopped ADio ADC data streaming.")
+            print("Stopped ADio ADC data streaming.\n")
