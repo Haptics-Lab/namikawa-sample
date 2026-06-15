@@ -5,16 +5,16 @@ import matplotlib.pyplot as plt
 
 
 def run_live_plot(
-    plot_queue,
-    start_event,
-    stop_event,
-    channel_labels: list[str],
-    plot_groups: list[tuple[str, list[int]]],
-    window_seconds: float = 5.0,
-    title: str = "Live Plot",
-    y_limits: tuple[float, float] | None = None,
-    y_band: tuple[float, float] | None = None,
-):
+        plot_queue,
+        start_event,
+        stop_event,
+        channel_labels: list[str],
+        plot_groups: list[tuple[str, list[int]]],
+        window_seconds: float = 3.0,
+        title: str = "Live Plot",
+        y_limits: tuple[float, float] | None = None,
+        y_band: tuple[float, float] | None = None,
+        ):
     if not _wait_until_started(start_event, stop_event):
         return
 
@@ -24,7 +24,7 @@ def run_live_plot(
         len(plot_groups),
         1,
         sharex=True,
-        figsize=(10, 2.5 * len(plot_groups)),
+        figsize=(6, 4 * len(plot_groups)),
     )
     fig.canvas.manager.set_window_title(title)
 
@@ -50,24 +50,21 @@ def run_live_plot(
                 for _ in range(channel_count)
             ]
 
-            for ax, (group_name, channel_indices) in zip(axes, plot_groups):
-                ax.set_title(group_name)
+            for ax, (_, channel_indices) in zip(axes, plot_groups):
+                ax.set_title(title)
+                ax.set_xlabel("Time [s]")
+                ax.set_ylabel("Force [N]")
                 if y_limits is not None:
                     ax.set_ylim(*y_limits)
                 if y_band is not None:
-                    ax.axhspan(*y_band, facecolor="lightyellow", edgecolor="gray", alpha=0.5, zorder=0)
+                    ax.axhspan(*y_band, facecolor="lightsteelblue", edgecolor="gray", alpha=0.5, zorder=0)
 
                 for channel_index in channel_indices:
                     label = channel_labels[channel_index]
 
-                    if "sync" in label.lower():
-                        line = ax.step([], [], where="post", label=label)[0]
-                    else:
-                        line = ax.plot([], [], label=label)[0]
+                    line = ax.plot([], [], label=label, color="darkblue")[0]
 
                     lines_by_channel[channel_index] = line
-
-                ax.legend(loc="upper right")
 
         latest_time = times[-1]
 

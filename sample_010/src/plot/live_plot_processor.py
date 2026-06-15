@@ -5,15 +5,15 @@ from src.plot.live_plotter import run_live_plot
 
 
 def start_live_plot_process(
-    enabled: bool,
-    channel_labels: list[str],
-    plot_groups: list[tuple[str, list[int]]],
-    title: str,
-    window_seconds: float = 5.0,
-    queue_maxsize: int = 1,
-    y_limits: tuple[float, float] | None = None,
-    y_band: tuple[float, float] | None = None,
-):
+        enabled: bool,
+        channel_labels: list[str],
+        plot_groups: list[tuple[str, list[int]]],
+        title: str,
+        window_seconds: float = 3.0,
+        queue_maxsize: int = 1,
+        y_limits: tuple[float, float] | None = None,
+        y_band: tuple[float, float] | None = None,
+        ):
     if not enabled:
         return None, None, None, None
 
@@ -43,7 +43,11 @@ def start_live_plot_process(
     return plot_queue, plot_start_event, plot_stop_event, plot_process
 
 
-def send_latest_to_plot(plot_queue, plot_start_event, data):
+def send_latest_to_plot(
+        plot_queue,
+        plot_start_event,
+        data
+        ):
     if plot_queue is None or plot_start_event is None or not plot_start_event.is_set():
         return
 
@@ -61,7 +65,11 @@ def send_latest_to_plot(plot_queue, plot_start_event, data):
             pass
 
 
-def stop_live_plot_process(plot_queue, plot_stop_event, plot_process):
+def stop_live_plot_process(
+        plot_queue,
+        plot_stop_event,
+        plot_process
+        ):
     if plot_stop_event is not None:
         plot_stop_event.set()
 

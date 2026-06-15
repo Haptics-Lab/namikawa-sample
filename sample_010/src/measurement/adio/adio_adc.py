@@ -9,7 +9,7 @@ from typing import Callable, Optional
 from collections import defaultdict
 from dataclasses import dataclass
 
-from src.adio.adio_transport import ADioTransport
+from src.measurement.adio.adio_transport import ADioTransport
 
 
 INPUT_VOLTAGE_TO_RANGE_CODE = {
@@ -404,31 +404,4 @@ class ADioADC:
             if writer is not None and writer.is_alive():
                 writer.join(timeout=5.0)
 
-            print("Stopped ADio ADC data streaming.")    
-
-
-if __name__ == "__main__":
-    adio_adc_config = ADioADCConfig(
-        fs=16000,
-        chunk_rate_hz=200,
-        request_chunks_per_command=50,
-        channels={
-            0: "Tactile LI Output",
-            1: "Tactile LT Output",
-            2: "Tactile RI Output",
-            3: "Tactile RT Output",
-            5: "Tactile Finger Input",
-            6: "Force",
-        },
-        input_range=5.0,
-    )
-
-    io = ADioTransport(serial="FT9IK4VX")
-    io.open()
-    io.reset_all()
-    
-    adc = ADioADC(transport=io, config=adio_adc_config)
-
-    adc.stream_to_csv(Path("output") / "test" / "raw_data.csv")
-    
-    io.close()
+            print("Stopped ADio ADC data streaming.")
