@@ -38,7 +38,7 @@ def main():
     }
 
     # Sync signal output during recording
-    sync_signal_mode: Optional[str] = None # None, "NI", or "ADio"
+    sync_signal_mode: Optional[str] = "ADio" # None, "NI", or "ADio"
 
     # Live plot enable/disable and settings
     # NI DAQ live plot settings
@@ -108,7 +108,7 @@ def main():
         input_range=5.0
     )
 
-    adio_io = ADioTransport(serial="FT9IK4VX")
+    adio_io = ADioTransport(serial="FT9I7HE7")
     adio_adc = ADioADC(transport=adio_io, config=adio_config)
 
     # Audio Recorder
@@ -177,7 +177,7 @@ def main():
             ni_counter = NICounter(device_name="Dev1")
 
         elif sync_signal_mode == "ADio":
-            adio_pwm_config = ADioPWMConfig(bit=0, idle_state=0)
+            adio_pwm_config = ADioPWMConfig(gpio_bit=0, idle_state=0)
             adio_pwm = ADioPWM(adio_io, adio_pwm_config)
 
         sync_start_event = threading.Event()
@@ -211,8 +211,8 @@ def main():
             elif sync_signal_mode == "ADio":
                 adio_pwm.output_sync_sequence(
                     segments=[
-                        ADioPWMSegment(freq_hz=0, duty=0.2, duration_s=3.5),
-                        ADioPWMSegment(freq_hz=0, duty=0.4, duration_s=None),
+                        ADioPWMSegment(freq_hz=1, duty=0.2, duration_s=3.5),
+                        ADioPWMSegment(freq_hz=1, duty=0.4, duration_s=None),
                     ],
                     start_event=sync_start_event,
                     stop_event=sync_stop_event,
