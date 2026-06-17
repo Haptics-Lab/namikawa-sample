@@ -14,7 +14,7 @@ plt.rcParams['ytick.direction'] = 'in'
 
 
 # Measurement target and device
-DEVICE_SERIAL = "FT9IK4VX"
+DEVICE_SERIAL = "FT9I7HE7"
 
 FINGERS = ("LI", "LT", "RI", "RT")
 
