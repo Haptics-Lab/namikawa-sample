@@ -402,7 +402,7 @@ if __name__ == "__main__":
         input_range=5.0,
     )
 
-    io = ADioTransport(serial="FT9IK4VX")
+    io = ADioTransport(serial="FT9I7HE7")
     io.open()
     io.reset_all()
     

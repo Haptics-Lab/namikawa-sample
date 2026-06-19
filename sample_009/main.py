@@ -1,10 +1,9 @@
 from pathlib import Path
-import threading
-import time
 
 from src.adio_adc import ADioADC, ADioADCConfig
 from src.adio_pwm import ADioPWM, ADioPWMConfig
 from src.adio_transport import ADioTransport
+
 
 def main():
     adio_pwm_config = ADioPWMConfig(
@@ -32,7 +31,7 @@ def main():
     )
 
 
-    io = ADioTransport(serial="FT9IK4VX")
+    io = ADioTransport(serial="FT9I7HE7")
     io.open()
     io.reset_all()
 

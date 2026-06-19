@@ -112,7 +112,7 @@ class ADioPWM:
 if __name__ == "__main__":
     adio_pwm_config = ADioPWMConfig(gpio_bit=0, freq_hz=1, duty=0.40)
 
-    io = ADioTransport(serial="FT9IK4VX")
+    io = ADioTransport(serial="FT9I7HE7")
     io.open()
     io.reset_all()
     
