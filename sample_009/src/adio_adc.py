@@ -47,6 +47,10 @@ class ADioADCConfig:
         return max(self.channels.keys()) + 1
 
     @property
+    def request_channels(self) -> list[int]:
+        return sorted(self.channels.keys())
+
+    @property
     def chunk_size(self) -> int:
         return int(self.fs / self.chunk_rate_hz)
 
@@ -135,7 +139,7 @@ class ADioADC:
         
         cmds = "".join(
             f"*4{ch:02X}1{request_chunks - 1:04X}#"
-            for ch in range(self.config.request_channel_count)
+            for ch in self.config.request_channels
         )
         self.io.write(cmds)
         
@@ -182,6 +186,8 @@ class ADioADC:
                         break
                     continue
 
+                packet_received_perf_counter = time.perf_counter()
+                packet_received_wall_time = time.time()
                 line = line.strip(b"\r\n")
 
                 if not (line.startswith(b"*40") and line.endswith(b"#")):
@@ -191,6 +197,9 @@ class ADioADC:
 
                 ch = int(line[3:4], 16)
                 payload = line[4:-1]
+
+                if ch not in self.config.channels:
+                    continue
 
                 if len(payload) != 5 * self.config.chunk_size:
                     print(
@@ -202,7 +211,7 @@ class ADioADC:
                 idx = self.recv_chunk_index[ch]
                 self.recv_chunk_index[ch] += 1
 
-                self.raw_queue.put((ch, idx, payload), timeout=0.2)
+                self.raw_queue.put((ch, idx, payload, packet_received_perf_counter, packet_received_wall_time), timeout=0.2)
 
         finally:
             self.io.set_command_response_routing(False)
@@ -214,18 +223,31 @@ class ADioADC:
         expected_channels = sorted(self.config.channels.keys())
         pending_chunks = defaultdict(dict)
         fs_hz = float(self.config.fs)
+        flush_every_chunks = 200
+        written_chunk_count = 0
 
         def write_rows(writer, idx, channels_to_write):
-            n_samples = min(len(pending_chunks[idx][ch]) for ch in channels_to_write)
+            n_samples = min(len(pending_chunks[idx][ch][0]) for ch in channels_to_write)
+            time_source_ch = channels_to_write[0]
+            base_perf_counter = pending_chunks[idx][time_source_ch][1]
+            base_wall_time = pending_chunks[idx][time_source_ch][2]
 
             for sample_in_chunk in range(n_samples):
                 sample_index = idx * self.config.chunk_size + sample_in_chunk
                 time_sec = sample_index / fs_hz
-                row = [sample_index, f"{time_sec:.6f}"]
+                sample_offset_sec = sample_in_chunk / fs_hz
+                perf_counter_sec = base_perf_counter + sample_offset_sec
+                wall_time_sec = base_wall_time + sample_offset_sec
+                row = [
+                    sample_index,
+                    f"{time_sec:.6f}",
+                    f"{perf_counter_sec:.9f}",
+                    f"{wall_time_sec:.6f}",
+                ]
 
                 for ch in expected_channels:
                     if ch in channels_to_write:
-                        value = pending_chunks[idx][ch][sample_in_chunk]
+                        value = pending_chunks[idx][ch][0][sample_in_chunk]
                         row.append(f"{value:.7f}")
                     else:
                         row.append("")
@@ -233,6 +255,8 @@ class ADioADC:
                 writer.writerow(row)
 
         def write_complete_chunks(writer):
+            nonlocal written_chunk_count
+
             while pending_chunks:
                 idx = min(pending_chunks.keys())
                 if not all(ch in pending_chunks[idx] for ch in expected_channels):
@@ -240,19 +264,24 @@ class ADioADC:
 
                 write_rows(writer, idx, expected_channels)
                 del pending_chunks[idx]
-                writer_file.flush()
+                written_chunk_count += 1
+                if written_chunk_count % flush_every_chunks == 0:
+                    writer_file.flush()
 
-        with csv_path.open("w", newline="", encoding="utf-8", buffering=1) as writer_file:
+        with csv_path.open("w", newline="", encoding="utf-8") as writer_file:
             writer = csv.writer(writer_file)
-            writer.writerow(["Sample Index", "Time [sec]"] + [self.config.channels[ch] for ch in expected_channels])
+            writer.writerow(
+                ["Sample Index", "Modality Time [sec]", "Perf Counter [sec]", "Wall Clock [unix sec]"]
+                + [self.config.channels[ch] for ch in expected_channels]
+            )
 
             while not self.log_done.is_set() or not self.file_queue.empty():
                 try:
-                    ch, idx, values = self.file_queue.get(timeout=0.5)
+                    ch, idx, values, packet_received_perf_counter, packet_received_wall_time = self.file_queue.get(timeout=0.5)
                 except queue.Empty:
                     continue
 
-                pending_chunks[idx][ch] = values
+                pending_chunks[idx][ch] = (values, packet_received_perf_counter, packet_received_wall_time)
                 write_complete_chunks(writer)
 
             for idx in sorted(pending_chunks.keys()):
@@ -268,7 +297,7 @@ class ADioADC:
 
         while not self.recv_done.is_set() or not self.raw_queue.empty():
             try:
-                ch, idx, payload = self.raw_queue.get(timeout=0.2)
+                ch, idx, payload, packet_received_perf_counter, packet_received_wall_time = self.raw_queue.get(timeout=0.2)
             except queue.Empty:
                 continue
 
@@ -286,7 +315,7 @@ class ADioADC:
                 continue
 
             try:
-                self.file_queue.put((ch, idx, values), timeout=0.5)
+                self.file_queue.put((ch, idx, values, packet_received_perf_counter, packet_received_wall_time))
             except queue.Full:
                 print(f"[QUEUE FULL: file_queue] ch{ch} idx={idx}")
                 continue
@@ -331,7 +360,7 @@ class ADioADC:
         send_thread = None
 
         try:
-            for ch in range(self.config.request_channel_count):
+            for ch in self.config.request_channels:
                 self.set_chunk_size(ch, self.config.chunk_size)
                 self.set_input_range(ch, self.config.input_range)
 
