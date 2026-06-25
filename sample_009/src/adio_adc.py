@@ -171,10 +171,11 @@ class ADioADC:
         Receive data from the device, parse it, and put it into the raw_queue.
         """
         self.receiver_ready.set()
+        self.io.set_command_response_routing(True)
 
         try:
             while self.running or self.io.bytes_available > 0:
-                line = self.io.read_until_hash(timeout=0.5)
+                line = self.io.read_stream_packet(5 * self.config.chunk_size, timeout=0.5)
 
                 if line is None:
                     if not self.running:
@@ -184,7 +185,8 @@ class ADioADC:
                 line = line.strip(b"\r\n")
 
                 if not (line.startswith(b"*40") and line.endswith(b"#")):
-                    print(f"[WARN] invalid ADC packet: {line[:10]!r}")
+                    if not self.io.route_command_response(line):
+                        print(f"[WARN] invalid ADC packet: {line[:10]!r}")
                     continue
 
                 ch = int(line[3:4], 16)
@@ -203,6 +205,7 @@ class ADioADC:
                 self.raw_queue.put((ch, idx, payload), timeout=0.2)
 
         finally:
+            self.io.set_command_response_routing(False)
             self.recv_done.set()
 
     def writer_thread(self, csv_path: Path):
