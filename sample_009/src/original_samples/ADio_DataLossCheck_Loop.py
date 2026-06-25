@@ -35,7 +35,7 @@ import queue
 
 from queue import Queue
 from collections import defaultdict
-from src.original_samples.ADio_Utils import (
+from ADio_Utils import (
     open_ftdi,
     flush_input_buffer,
     _readline,
@@ -730,5 +730,5 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt  # ← 最後の描画でしか使わない
     import numpy as np               # 同上
 
-    main()
+    # main()
     plot_saved_data(BIN_FILE)
