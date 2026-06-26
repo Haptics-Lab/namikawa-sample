@@ -41,6 +41,7 @@ class ADioADCConfig:
     request_chunks_per_command: int
     channels: dict[int, str]
     input_range: float = 5.0
+    early_request_margin_chunks: int = 10
 
     @property
     def request_channel_count(self) -> int:
@@ -57,6 +58,10 @@ class ADioADCConfig:
     @property
     def request_interval(self) -> float:
         return self.request_chunks_per_command / self.chunk_rate_hz
+
+    @property
+    def request_trigger_chunks(self) -> int:
+        return max(1, self.request_chunks_per_command - self.early_request_margin_chunks)
 
 
 class ADioADC:
@@ -76,6 +81,7 @@ class ADioADC:
         self.receiver_ready = threading.Event()
         self.logger_ready = threading.Event()
         self.recv_chunk_index = defaultdict(int)
+        self.recv_condition = threading.Condition()
         self.running = False
     
     @staticmethod
@@ -208,8 +214,10 @@ class ADioADC:
                     )
                     continue
 
-                idx = self.recv_chunk_index[ch]
-                self.recv_chunk_index[ch] += 1
+                with self.recv_condition:
+                    idx = self.recv_chunk_index[ch]
+                    self.recv_chunk_index[ch] += 1
+                    self.recv_condition.notify_all()
 
                 self.raw_queue.put((ch, idx, payload, packet_received_perf_counter, packet_received_wall_time), timeout=0.2)
 
@@ -322,24 +330,31 @@ class ADioADC:
 
         self.log_done.set()
 
-    def send_data_request_loop(self, interval):
+    def send_data_request_loop(self):
+        try:
+            self.request_data(self.config.request_chunks_per_command)
+        except Exception as e:
+            print(f"[SEND] Error is occurred during initial write: {e}")
+            return
 
-        next_time = time.time()
+        next_trigger = self.config.request_trigger_chunks
 
         while self.running:
+            with self.recv_condition:
+                self.recv_condition.wait_for(
+                    lambda: (not self.running or min(self.recv_chunk_index[ch] for ch in self.config.request_channels) >= next_trigger)
+                )
+
+                if not self.running:
+                    break
+
             try:
-                self.request_data()
+                self.request_data(self.config.request_chunks_per_command)
             except Exception as e:
                 print(f"[SEND] Error is occurred during write: {e}")
-                break
+                return
 
-            next_time += interval
-            sleep_time = next_time - time.time()
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-            else:
-                print(f"[WARN] Data request is behind (behind by {-sleep_time:.3f}s)")
-                next_time = time.time()
+            next_trigger += self.config.request_chunks_per_command
 
     def stream_to_csv(
             self,
@@ -380,7 +395,6 @@ class ADioADC:
 
             send_thread = threading.Thread(
                 target=self.send_data_request_loop,
-                args=(self.config.request_interval,),
                 name="ADioADCRequester",
                 daemon=False,
             )
@@ -388,12 +402,14 @@ class ADioADC:
 
             print("Started streaming data with ADio ADC.")
             print(f"    Writing to {csv_path}")
-            print(f"    Requesting data...({self.config.request_interval:.3f}s interval)\n")
+            print(f"    Requesting data... (chunk trigger: {self.config.request_trigger_chunks}, request chunks: {self.config.request_chunks_per_command})\n")
 
             input("Press Enter to stop...")
 
         finally:
             self.running = False
+            with self.recv_condition:
+                self.recv_condition.notify_all()
 
             if send_thread is not None and send_thread.is_alive():
                 send_thread.join(timeout=2.0)

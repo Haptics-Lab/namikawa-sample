@@ -41,6 +41,7 @@ def main():
     pwm.output_signal()
     adc.stream_to_csv(Path("output") / "adio_data.csv")
 
+    io.reset_all()
     io.close()
 
 if __name__ == "__main__":
