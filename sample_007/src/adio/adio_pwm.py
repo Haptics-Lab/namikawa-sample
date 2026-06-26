@@ -159,7 +159,7 @@ class ADioPWM:
 if __name__ == "__main__":
     adio_pwm_config = ADioPWMConfig(gpio_bit=0, idle_state=0)
 
-    io = ADioTransport(serial="FT9IK4VX")
+    io = ADioTransport(serial="FT9I7HE7")
     io.open()
     
     pwm = ADioPWM(io, adio_pwm_config)
@@ -170,8 +170,8 @@ if __name__ == "__main__":
         target=pwm.output_sync_sequence,
         kwargs={
             "segments": [
-                ADioPWMSegment(freq_hz=0, duty=0.2, duration_s=3.5),
-                ADioPWMSegment(freq_hz=0, duty=0.4, duration_s=None),
+                ADioPWMSegment(freq_hz=1, duty=0.2, duration_s=3.5),
+                ADioPWMSegment(freq_hz=1, duty=0.4, duration_s=None),
             ],
             "start_event": start_event,
             "stop_event": stop_event,
