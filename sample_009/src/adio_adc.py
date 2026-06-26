@@ -283,10 +283,7 @@ class ADioADC:
                 pending_chunks[idx][ch] = (values, packet_received_perf_counter, packet_received_wall_time)
                 write_complete_chunks(writer)
 
-            for idx in sorted(pending_chunks.keys()):
-                channels_to_write = sorted(pending_chunks[idx].keys())
-                if channels_to_write:
-                    write_rows(writer, idx, channels_to_write)
+            write_complete_chunks(writer)
 
             writer_file.flush()
             os.fsync(writer_file.fileno())
