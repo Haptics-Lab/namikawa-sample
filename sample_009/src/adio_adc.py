@@ -41,7 +41,6 @@ class ADioADCConfig:
     request_chunks_per_command: int
     channels: dict[int, str]
     input_range: float = 5.0
-    early_request_margin_chunks: int = 10
 
     @property
     def request_channel_count(self) -> int:
@@ -58,11 +57,6 @@ class ADioADCConfig:
     @property
     def request_interval(self) -> float:
         return self.request_chunks_per_command / self.chunk_rate_hz
-
-    @property
-    def request_trigger_chunks(self) -> int:
-        return max(1, self.request_chunks_per_command - self.early_request_margin_chunks)
-
 
 class ADioADC:
     def __init__(
@@ -81,8 +75,7 @@ class ADioADC:
         self.receiver_ready = threading.Event()
         self.logger_ready = threading.Event()
         self.recv_chunk_index = defaultdict(int)
-        self.recv_condition = threading.Condition()
-        self.running = False
+        self.stop_event = threading.Event()
     
     @staticmethod
     def raw_to_voltage(raw: int, input_range: float = 5.0) -> float:
@@ -184,11 +177,11 @@ class ADioADC:
         self.io.set_command_response_routing(True)
 
         try:
-            while self.running or self.io.bytes_available > 0:
+            while not self.stop_event.is_set() or self.io.bytes_available > 0:
                 line = self.io.read_stream_packet(5 * self.config.chunk_size, timeout=0.5)
 
                 if line is None:
-                    if not self.running:
+                    if self.stop_event.is_set():
                         break
                     continue
 
@@ -214,10 +207,8 @@ class ADioADC:
                     )
                     continue
 
-                with self.recv_condition:
-                    idx = self.recv_chunk_index[ch]
-                    self.recv_chunk_index[ch] += 1
-                    self.recv_condition.notify_all()
+                idx = self.recv_chunk_index[ch]
+                self.recv_chunk_index[ch] += 1
 
                 self.raw_queue.put((ch, idx, payload, packet_received_perf_counter, packet_received_wall_time), timeout=0.2)
 
@@ -330,38 +321,30 @@ class ADioADC:
 
         self.log_done.set()
 
-    def send_data_request_loop(self):
-        try:
-            self.request_data(self.config.request_chunks_per_command)
-        except Exception as e:
-            print(f"[SEND] Error is occurred during initial write: {e}")
-            return
+    def send_data_request_loop(self, interval):
 
-        next_trigger = self.config.request_trigger_chunks
+        next_time = time.perf_counter()
 
-        while self.running:
-            with self.recv_condition:
-                self.recv_condition.wait_for(
-                    lambda: (not self.running or min(self.recv_chunk_index[ch] for ch in self.config.request_channels) >= next_trigger)
-                )
-
-                if not self.running:
-                    break
-
+        while not self.stop_event.is_set():
             try:
-                self.request_data(self.config.request_chunks_per_command)
+                self.request_data()
             except Exception as e:
                 print(f"[SEND] Error is occurred during write: {e}")
-                return
+                break
 
-            next_trigger += self.config.request_chunks_per_command
+            next_time += interval
+            sleep_time = next_time - time.perf_counter()
+            if sleep_time > 0:
+                self.stop_event.wait(sleep_time)
+            else:
+                print(f"[WARN] Data request is behind (behind by {-sleep_time:.3f}s)")
+                next_time = time.perf_counter()
 
     def stream_to_csv(
             self,
             csv_path: Path,
             ):
         self._reset_state()
-        self.running = True
 
         if self.config.chunk_size > 2047:
             raise ValueError(f"CHUNK_SIZE={self.config.chunk_size} is too large. Max is 2047.")
@@ -395,6 +378,7 @@ class ADioADC:
 
             send_thread = threading.Thread(
                 target=self.send_data_request_loop,
+                args=(self.config.request_interval,),
                 name="ADioADCRequester",
                 daemon=False,
             )
@@ -402,14 +386,12 @@ class ADioADC:
 
             print("Started streaming data with ADio ADC.")
             print(f"    Writing to {csv_path}")
-            print(f"    Requesting data... (chunk trigger: {self.config.request_trigger_chunks}, request chunks: {self.config.request_chunks_per_command})\n")
+            print(f"    Requesting data...({self.config.request_interval:.3f}s interval)\n")
 
             input("Press Enter to stop...")
 
         finally:
-            self.running = False
-            with self.recv_condition:
-                self.recv_condition.notify_all()
+            self.stop_event.set()
 
             if send_thread is not None and send_thread.is_alive():
                 send_thread.join(timeout=2.0)
