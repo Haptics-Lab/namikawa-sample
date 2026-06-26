@@ -1,5 +1,7 @@
 import time
 import threading
+import queue
+from queue import Queue
 from typing import Optional
 
 import ftd2xx
@@ -27,6 +29,8 @@ class ADioTransport:
         self.cmd_lock = threading.Lock()
 
         self._rx_buf = bytearray()
+        self._route_cmd_responses = threading.Event()
+        self._cmd_response_queue = Queue()
 
     @staticmethod
     def list_serials() -> list[str]:
@@ -116,6 +120,74 @@ class ADioTransport:
                 time.sleep(0.001)
 
         return None
+
+    def set_command_response_routing(self, enabled: bool) -> None:
+        if enabled:
+            self._route_cmd_responses.set()
+        else:
+            self._route_cmd_responses.clear()
+
+    def route_command_response(self, packet: bytes) -> bool:
+        text = packet.strip()
+        if text.startswith((b"*OK", b"*NG")):
+            self._cmd_response_queue.put(text)
+            return True
+        return False
+
+    def read_stream_packet(self, adc_payload_size: int, timeout: float = 1.0) -> Optional[bytes]:
+        """
+        Read one packet while ADC streaming is active.
+
+        ADC packets are fixed length (*40 + ch + payload + #), while command
+        responses such as *OK# and *NG# are variable length.
+        """
+        deadline = time.time() + timeout
+        adc_packet_size = 4 + adc_payload_size + 1
+
+        while time.time() < deadline:
+            markers = [
+                pos for pos in (
+                    self._rx_buf.find(b"*40"),
+                    self._rx_buf.find(b"*OK"),
+                    self._rx_buf.find(b"*NG"),
+                )
+                if pos >= 0
+            ]
+
+            if markers:
+                first_marker = min(markers)
+                if first_marker > 0:
+                    del self._rx_buf[:first_marker]
+            elif len(self._rx_buf) > 2:
+                del self._rx_buf[:-2]
+
+            if self._rx_buf.startswith(b"*40"):
+                if len(self._rx_buf) >= adc_packet_size:
+                    packet = bytes(self._rx_buf[:adc_packet_size])
+                    if packet.endswith(b"#"):
+                        del self._rx_buf[:adc_packet_size]
+                        while self._rx_buf[:1] in (b"\r", b"\n"):
+                            del self._rx_buf[:1]
+                        return packet
+
+                    del self._rx_buf[:1]
+
+            elif self._rx_buf.startswith((b"*OK", b"*NG")):
+                hash_pos = self._rx_buf.find(b"#")
+                if hash_pos >= 0:
+                    packet = bytes(self._rx_buf[:hash_pos + 1])
+                    del self._rx_buf[:hash_pos + 1]
+                    while self._rx_buf[:1] in (b"\r", b"\n"):
+                        del self._rx_buf[:1]
+                    return packet
+
+            n = self.handle.getQueueStatus()
+            if n > 0:
+                self._rx_buf.extend(self.handle.read(n))
+            else:
+                time.sleep(0.001)
+
+        return None
     
     def write(self, command: str) -> None:
         """
@@ -130,7 +202,13 @@ class ADioTransport:
         with self.cmd_lock:
             self.write(command)
 
-            resp = self.read_until_hash(timeout)
+            if self._route_cmd_responses.is_set():
+                try:
+                    resp = self._cmd_response_queue.get(timeout=timeout)
+                except queue.Empty:
+                    resp = None
+            else:
+                resp = self.read_until_hash(timeout)
 
             if resp is None:
                 raise TimeoutError(

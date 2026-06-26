@@ -49,6 +49,10 @@ class ADioADCConfig:
         return max(self.channels.keys()) + 1
 
     @property
+    def request_channels(self) -> list[int]:
+        return sorted(self.channels.keys())
+
+    @property
     def chunk_size(self) -> int:
         return int(self.fs / self.chunk_rate_hz)
 
@@ -74,7 +78,7 @@ class ADioADC:
         self.receiver_ready = threading.Event()
         self.logger_ready = threading.Event()
         self.recv_chunk_index = defaultdict(int)
-        self.running = False
+        self.stop_event = threading.Event()
     
     @staticmethod
     def raw_to_voltage(raw: int, input_range: float = 5.0) -> float:
@@ -137,7 +141,7 @@ class ADioADC:
         
         cmds = "".join(
             f"*4{ch:02X}1{request_chunks - 1:04X}#"
-            for ch in range(self.config.request_channel_count)
+            for ch in self.config.request_channels
         )
         self.io.write(cmds)
         
@@ -173,25 +177,29 @@ class ADioADC:
         Receive data from the device, parse it, and put it into the raw_queue.
         """
         self.receiver_ready.set()
+        self.io.set_command_response_routing(True)
 
         try:
-            while self.running or self.io.bytes_available > 0:
-                line = self.io.read_until_hash(timeout=0.5)
+            while not self.stop_event.is_set() or self.io.bytes_available > 0:
+                line = self.io.read_stream_packet(5 * self.config.chunk_size, timeout=0.5)
 
                 if line is None:
-                    if not self.running:
+                    if self.stop_event.is_set():
                         break
                     continue
 
                 line = line.strip(b"\r\n")
 
                 if not (line.startswith(b"*40") and line.endswith(b"#")):
-                    if line != b'*OK#':
+                    if not self.io.route_command_response(line):
                         print(f"[WARN] invalid ADC packet: {line[:10]!r}")
                     continue
 
                 ch = int(line[3:4], 16)
                 payload = line[4:-1]
+
+                if ch not in self.config.channels:
+                    continue
 
                 if len(payload) != 5 * self.config.chunk_size:
                     print(
@@ -206,6 +214,7 @@ class ADioADC:
                 self.raw_queue.put((ch, idx, payload), timeout=0.2)
 
         finally:
+            self.io.set_command_response_routing(False)
             self.recv_done.set()
 
     def writer_thread(self, csv_path: Path):
@@ -214,6 +223,8 @@ class ADioADC:
         expected_channels = sorted(self.config.channels.keys())
         pending_chunks = defaultdict(dict)
         fs_hz = float(self.config.fs)
+        flush_every_chunks = 200
+        written_chunk_count = 0
 
         def write_rows(writer, idx, channels_to_write):
             n_samples = min(len(pending_chunks[idx][ch]) for ch in channels_to_write)
@@ -233,6 +244,8 @@ class ADioADC:
                 writer.writerow(row)
 
         def write_complete_chunks(writer):
+            nonlocal written_chunk_count
+
             while pending_chunks:
                 idx = min(pending_chunks.keys())
                 if not all(ch in pending_chunks[idx] for ch in expected_channels):
@@ -240,9 +253,11 @@ class ADioADC:
 
                 write_rows(writer, idx, expected_channels)
                 del pending_chunks[idx]
-                writer_file.flush()
+                written_chunk_count += 1
+                if written_chunk_count % flush_every_chunks == 0:
+                    writer_file.flush()
 
-        with csv_path.open("w", newline="", encoding="utf-8", buffering=1) as writer_file:
+        with csv_path.open("w", newline="", encoding="utf-8") as writer_file:
             writer = csv.writer(writer_file)
             writer.writerow(["Sample Index", "Time [sec]"] + [self.config.channels[ch] for ch in expected_channels])
 
@@ -307,9 +322,9 @@ class ADioADC:
 
     def send_data_request_loop(self, interval):
 
-        next_time = time.time()
+        next_time = time.perf_counter()
 
-        while self.running:
+        while not self.stop_event.is_set():
             try:
                 self.request_data()
             except Exception as e:
@@ -317,12 +332,12 @@ class ADioADC:
                 break
 
             next_time += interval
-            sleep_time = next_time - time.time()
+            sleep_time = next_time - time.perf_counter()
             if sleep_time > 0:
-                time.sleep(sleep_time)
+                self.stop_event.wait(sleep_time)
             else:
                 print(f"[WARN] Data request is behind (behind by {-sleep_time:.3f}s)")
-                next_time = time.time()
+                next_time = time.perf_counter()
 
     def stream_to_csv(
             self,
@@ -332,7 +347,6 @@ class ADioADC:
             plot_callback: Optional[Callable[[int, int, list[float]], None]] = None,
             ):
         self._reset_state()
-        self.running = True
 
         if self.config.chunk_size > 2047:
             raise ValueError(f"CHUNK_SIZE={self.config.chunk_size} is too large. Max is 2047.")
@@ -346,7 +360,7 @@ class ADioADC:
         send_thread = None
 
         try:
-            for ch in range(self.config.request_channel_count):
+            for ch in self.config.request_channels:
                 self.set_chunk_size(ch, self.config.chunk_size)
                 self.set_input_range(ch, self.config.input_range)
 
@@ -386,7 +400,7 @@ class ADioADC:
             print("Stopping data streaming...")
 
         finally:
-            self.running = False
+            self.stop_event.set()
 
             if send_thread is not None and send_thread.is_alive():
                 send_thread.join(timeout=2.0)
