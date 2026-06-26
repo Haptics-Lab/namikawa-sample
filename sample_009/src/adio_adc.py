@@ -228,8 +228,11 @@ class ADioADC:
         def write_rows(writer, idx, channels_to_write):
             n_samples = min(len(pending_chunks[idx][ch][0]) for ch in channels_to_write)
             time_source_ch = channels_to_write[0]
-            base_perf_counter = pending_chunks[idx][time_source_ch][1]
-            base_wall_time = pending_chunks[idx][time_source_ch][2]
+            packet_received_perf_counter = pending_chunks[idx][time_source_ch][1]
+            packet_received_wall_time = pending_chunks[idx][time_source_ch][2]
+            chunk_duration_sec = (n_samples - 1) / fs_hz
+            base_perf_counter = packet_received_perf_counter - chunk_duration_sec
+            base_wall_time = packet_received_wall_time - chunk_duration_sec
 
             for sample_in_chunk in range(n_samples):
                 sample_index = idx * self.config.chunk_size + sample_in_chunk
