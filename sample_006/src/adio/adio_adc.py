@@ -344,7 +344,7 @@ class ADioADC:
     def stream_to_csv(
             self,
             csv_path: Path,
-            external_stop_event: threading.Event,
+            stop_event: threading.Event,
             started_event: threading.Event,
             ):
         self._reset_state()
@@ -394,7 +394,7 @@ class ADioADC:
             
             started_event.set()
 
-            external_stop_event.wait()
+            stop_event.wait()
 
         finally:
             self.internal_stop_event.set()
@@ -451,7 +451,7 @@ if __name__ == "__main__":
             target=adc.stream_to_csv,
             kwargs={
                 "csv_path": Path("output") / "test" / "adio_data.csv",
-                "external_stop_event": stop_event,
+                "stop_event": stop_event,
                 "started_event": started_event,
             },
             daemon=False,
