@@ -23,25 +23,25 @@ class MeasurementResult:
 
 class FingerMeasurement:
     def __init__(
-        self,
-        transport: ADioTransport,
-        finger: str,
-        channels: dict[int, str],
-        raw_csv_path: Path,
-        sound_path: Path,
-        force_converter: Callable[[float], float],
-        sampling_rate: int,
-        chunk_rate_hz: int,
-        request_chunks_per_command: int,
-        input_range: float,
-        trial_count: int,
-        live_plot_enabled: bool = True,
-        live_plot_window_seconds: float = 3.0,
-        live_plot_y_limits: tuple[float, float] | None = (0.0, 1.5),
-        live_plot_y_band: tuple[float, float] | None = (0.9, 1.1),
-        input_func: Callable[[str], str] = input,
-        play_sound: Callable[[Path], None] = sound_player.play_sound,
-    ) -> None:
+            self,
+            transport: ADioTransport,
+            finger: str,
+            channels: dict[int, str],
+            raw_csv_path: Path,
+            sound_path: Path,
+            force_converter: Callable[[float], float],
+            sampling_rate: int,
+            chunk_rate_hz: int,
+            request_chunks_per_command: int,
+            input_range: float,
+            trial_count: int,
+            live_plot_enabled: bool = True,
+            live_plot_window_seconds: float = 3.0,
+            live_plot_y_limits: tuple[float, float] | None = (0.0, 1.5),
+            live_plot_y_band: tuple[float, float] | None = (0.9, 1.1),
+            input_func: Callable[[str], str] = input,
+            play_sound: Callable[[Path], None] = sound_player.play_sound,
+            ) -> None:
         self.transport = transport
         self.finger = finger
         self.channels = channels
