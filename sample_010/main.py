@@ -29,7 +29,7 @@ CHANNELS = {
 
 
 def force_converter(raw_value: float) -> float:
-    return 1.1332 * raw_value
+    return 0.5141 * raw_value
 
 
 def one_finger(io: ADioTransport, finger: str) -> None:
