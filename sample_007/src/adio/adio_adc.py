@@ -44,6 +44,8 @@ class ADioADCConfig:
     request_chunks_per_command: int
     channels: dict[int, str]
     input_range: float = 5.0
+    plot_sample_rate_hz: float = 100.0
+    plot_update_interval_s: float = 1.0
 
     @property
     def request_channel_count(self) -> int:
@@ -229,7 +231,32 @@ class ADioADC:
         fs_hz = float(self.config.fs)
         flush_every_chunks = 200
         written_chunk_count = 0
-        plot_downsample_factor = self.config.fs / 1000.0
+        plot_downsample_factor = max(1, int(self.config.fs / self.config.plot_sample_rate_hz))
+        pending_plot_times = []
+        pending_plot_data = []
+        next_plot_flush_time = None
+
+        def flush_plot_buffer(force=False):
+            nonlocal next_plot_flush_time
+
+            if self.plot_callback is None or not pending_plot_times:
+                return
+
+            if next_plot_flush_time is None:
+                next_plot_flush_time = pending_plot_times[0] + self.config.plot_update_interval_s
+
+            latest_plot_time = pending_plot_times[-1]
+            if not force and latest_plot_time < next_plot_flush_time:
+                return
+
+            try:
+                self.plot_callback((pending_plot_times.copy(), pending_plot_data.copy()))
+            except Exception as e:
+                print(f"[WARN] plot_callback failed: {e}")
+            finally:
+                pending_plot_times.clear()
+                pending_plot_data.clear()
+                next_plot_flush_time = latest_plot_time + self.config.plot_update_interval_s
 
         def write_rows(writer, idx, channels_to_write):
             n_samples = min(len(pending_chunks[idx][ch][0]) for ch in channels_to_write)
@@ -274,10 +301,9 @@ class ADioADC:
                     plot_data.append(plot_row)
 
             if is_complete_chunk and self.plot_callback is not None:
-                try:
-                    self.plot_callback((plot_times[::int(plot_downsample_factor)], plot_data[::int(plot_downsample_factor)]))
-                except Exception as e:
-                    print(f"[WARN] plot_callback failed: {e}")
+                pending_plot_times.extend(plot_times[::plot_downsample_factor])
+                pending_plot_data.extend(plot_data[::plot_downsample_factor])
+                flush_plot_buffer()
 
         def write_complete_chunks(writer):
             nonlocal written_chunk_count
@@ -310,6 +336,7 @@ class ADioADC:
                 write_complete_chunks(writer)
 
             write_complete_chunks(writer)
+            flush_plot_buffer(force=True)
 
             writer_file.flush()
             os.fsync(writer_file.fileno())
@@ -441,7 +468,7 @@ class ADioADC:
             if writer is not None and writer.is_alive():
                 writer.join(timeout=5.0)
 
-            print("Stopped ADio ADC data streaming.")    
+            print("Stopped ADio ADC data streaming.\n")    
 
 
 if __name__ == "__main__":

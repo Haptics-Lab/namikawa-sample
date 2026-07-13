@@ -45,7 +45,7 @@ class EEGRecorder:
 
     def connect(self):
         self.oif.set_ch_all()
-        self.oif.change_buffer_length(5000)
+        self.oif.change_buffer_length(30000)
         self.oif.connect(self.com_port)
         self.connected = True
 
@@ -73,20 +73,25 @@ class EEGRecorder:
             stop_event: threading.Event,
             started_event: threading.Event,
             plot_callback: Callable[[PlotData], None] | None = None,
+            sync_reverse: bool = True,
             ):
         if not self.connected:
             self.connect()
 
         csv_path.parent.mkdir(parents=True, exist_ok=True)
 
-        plot_downsample_factor = self.fs / 500.0
+        plot_downsample_factor = self.fs / 100.0
 
-        header = ["Sample Index", "EEG Time [s]", "Estimated Wall Clock [s]"] + EEG_CHANNELS + ["Sync Signal"]
+        header = [
+            "Sample Index",
+            "Modality Time [sec]",
+            "Perf Counter [sec]",
+            "Wall Clock [unix sec]",
+        ] + EEG_CHANNELS + ["Sync Signal"]
 
         self.oif.start()
         self.oif.inst_on(5000)
         time.sleep(5.0)
-        self.oif.orbtobuffer_interval(1000)
         self.oif.clear_memory()
 
         print("Started EEG streaming.", flush=True)
@@ -95,7 +100,8 @@ class EEGRecorder:
         started_event.set()
 
         sample_index = 0
-        prev_received_time_ns = None
+        prev_received_wall_time_sec = None
+        prev_received_perf_counter_sec = None
 
         try:
             with open(csv_path, "w", newline="", encoding="utf-8") as f:
@@ -103,32 +109,43 @@ class EEGRecorder:
                 writer.writerow(header)
 
                 while not stop_event.is_set():
-                    res = self.oif.getfrombuffer(1000)
+                    res = self.oif.data(1000)
 
-                    received_time_ns = time.time_ns()
-                    if prev_received_time_ns is None:
-                        prev_received_time_ns = received_time_ns - len(res) * 1e9 / self.fs
-                    interval_sec = (received_time_ns - prev_received_time_ns) / len(res)
+                    received_wall_time_sec = time.time()
+                    received_perf_counter_sec = time.perf_counter()
+                    if prev_received_wall_time_sec is None:
+                        prev_received_wall_time_sec = received_wall_time_sec - len(res) / self.fs
+                    if prev_received_perf_counter_sec is None:
+                        prev_received_perf_counter_sec = received_perf_counter_sec - len(res) / self.fs
+                    wall_interval_sec = (received_wall_time_sec - prev_received_wall_time_sec) / len(res)
+                    perf_interval_sec = (received_perf_counter_sec - prev_received_perf_counter_sec) / len(res)
 
-                    rows = [
-                        [sample_index + i, (sample_index + i)/self.fs, (prev_received_time_ns + interval_sec * (i + 1))/1e9] + list(row[1:13])
-                        for i, row in enumerate(res)
-                    ]
+                    rows = []
+                    for i, row in enumerate(res):
+                        values = list(row[1:13])
+                        if sync_reverse:
+                            values[-1] *= -1
+                        rows.append([
+                            sample_index + i,
+                            (sample_index + i) / self.fs,
+                            prev_received_perf_counter_sec + perf_interval_sec * (i + 1),
+                            prev_received_wall_time_sec + wall_interval_sec * (i + 1),
+                        ] + values)
 
                     writer.writerows(rows)
                     if plot_callback is not None and rows:
                         try:
                             plot_times = [row[1] for row in rows]
-                            plot_values = [row[3:] for row in rows]
+                            plot_values = [row[4:] for row in rows]
                             plot_callback((plot_times[::int(plot_downsample_factor)], plot_values[::int(plot_downsample_factor)]))
                         except Exception as exc:
                             print(f"EEG plot callback error: {exc}", flush=True)
 
                     sample_index += len(rows)
-                    prev_received_time_ns = received_time_ns
+                    prev_received_wall_time_sec = received_wall_time_sec
+                    prev_received_perf_counter_sec = received_perf_counter_sec
 
         finally:
-            self.oif.orbtobuffer_stopinterval()
             self.oif.end()
             self.oif.disconnect()
             print("Stopped EEG streaming.", flush=True)

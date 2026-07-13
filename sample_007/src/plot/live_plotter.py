@@ -10,7 +10,7 @@ def run_live_plot(
     stop_event,
     channel_labels: list[str],
     plot_groups: list[tuple[str, list[int]]],
-    window_seconds: float = 5.0,
+    window_seconds: float = 3.0,
     title: str = "Live Plot",
 ):
     if not _wait_until_started(start_event, stop_event):

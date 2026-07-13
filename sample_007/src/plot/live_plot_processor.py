@@ -9,7 +9,7 @@ def start_live_plot_process(
         channel_labels: list[str],
         plot_groups: list[tuple[str, list[int]]],
         title: str,
-        window_seconds: float = 5.0,
+        window_seconds: float = 3.0,
         queue_maxsize: int = 1,
         ):
     if not enabled:
