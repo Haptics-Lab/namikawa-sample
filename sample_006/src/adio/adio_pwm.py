@@ -51,8 +51,8 @@ class ADioPWM:
         Note: In the manual, DDDD data says 1=input, 0=output.
         This function enables only the bit via HH mask and set DDDD bit to 0.
         """
-        hh = self._bit_mask(bit) # enable only this bit
-        dddd = 0x0000 # 0 means output for enabled bits
+        hh = self._bit_mask(bit)    # enable only this bit
+        dddd = 0x0000               # 0 means output for enabled bits
         resp = self.io.send_cmd(f"*9{hh:02X}0{dddd:04X}#", timeout=1.0)
         if "*NG#" in resp:
             raise RuntimeError(f"DIR set failed: {resp!r}")
@@ -62,7 +62,7 @@ class ADioPWM:
         Command A (E=0): PWM/GPIO mode switch.
         DDDD bit: 1=PWM, 0=GPIO for enabled bits.
         """
-        hh = self._bit_mask(bit) # enable only this bit
+        hh = self._bit_mask(bit)    # enable only this bit
         dddd = self._bit_mask(bit) if enable else 0x0000
         resp = self.io.send_cmd(f"*A{hh:02X}0{dddd:04X}#", timeout=1.0)
         if "*NG#" in resp:

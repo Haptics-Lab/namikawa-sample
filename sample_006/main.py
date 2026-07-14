@@ -4,6 +4,7 @@ from functools import partial
 import time
 import subprocess
 from typing import Optional
+import os
 
 from src.ni.ni_adc import NIADC, ChannelConfig as ADCChannelConfig, TerminalConfiguration
 from src.ni.ni_counter import NICounter, ChannelConfig as CounterChannelConfig
@@ -29,11 +30,11 @@ def main():
     recording_bool = {
         "NI DAQ": False,
         "ADio DAQ": True,
-        "Audio": False,
+        "Audio": True,
         "MocapForAll Cameras": False,
-        "Motive MarkerSets": False,
-        "Motive RigidBodies": False,
-        "EEG": False,
+        "Motive MarkerSets": True,
+        "Motive RigidBodies": True,
+        "EEG": True,
     }
 
     # Sync signal output during recording
@@ -104,6 +105,10 @@ def main():
 
     # EEG
     eeg_config = EEGConfig(com_port="COM3")
+
+
+    # === Folder Preparation ===
+    os.makedirs(raw_data_folder, exist_ok=False)
 
 
     # === ADio Initialization ===
@@ -352,7 +357,12 @@ def main():
             eeg_process.stdin.flush()
             eeg_process.stdin.write("EXIT\n")
             eeg_process.stdin.flush()
-            eeg_process.wait()
+
+            try:
+                eeg_process.wait(timeout=5.0)
+            except subprocess.TimeoutExpired:
+                eeg_process.terminate()
+                eeg_process.wait(timeout=5.0)
 
         stop_event.set()
         for thread in threads:

@@ -15,7 +15,7 @@ Vector3 = tuple[float, float, float]
 @dataclass(frozen=True)
 class MarkerSample:
     wallclock_timestamp: float
-    perf_timestamp: int
+    perf_timestamp: float
     motive_timestamp: Optional[float]
     positions: list[Vector3]
 
@@ -104,18 +104,18 @@ class MarkerSetReceiver:
         return sorted(range(marker_count), key=lambda i: prefixes[i])
 
     @staticmethod
-    def _get_timestamps(frame: dict) -> tuple[float, int, Optional[float]]:
-        received_time_ns = frame.get("received_time_ns")
-        received_perf_counter_ns = frame.get("received_perf_counter_ns")
+    def _get_timestamps(frame: dict) -> tuple[float, float, Optional[float]]:
+        received_time_sec = frame.get("received_time_sec")
+        received_perf_counter_sec = frame.get("received_perf_counter_sec")
         wallclock = (
-            received_time_ns / 1e9
-            if isinstance(received_time_ns, int) and received_time_ns >= 0
+            received_time_sec
+            if isinstance(received_time_sec, (int, float)) and received_time_sec >= 0
             else time.time()
         )
         perf = (
-            received_perf_counter_ns
-            if isinstance(received_perf_counter_ns, int) and received_perf_counter_ns >= 0
-            else time.perf_counter_ns()
+            received_perf_counter_sec
+            if isinstance(received_perf_counter_sec, (int, float)) and received_perf_counter_sec >= 0
+            else time.perf_counter()
         )
 
         timestamp = frame.get("timestamp")
@@ -140,7 +140,7 @@ class MarkerSetReceiver:
         
         prefixes = cls._build_column_prefixes(marker_count, marker_labels)
 
-        header = ["Motive Time", "Wall Clock [s]", "Perf Counter [ns]"]
+        header = ["Modality Time [sec]", "Wall Clock [unix sec]", "Perf Counter [sec]"]
         for idx in column_order:
             p = prefixes[idx]
             header.extend([f"{p}_x", f"{p}_y", f"{p}_z"])

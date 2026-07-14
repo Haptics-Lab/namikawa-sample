@@ -416,7 +416,7 @@ class ADioADC:
             if writer is not None and writer.is_alive():
                 writer.join(timeout=5.0)
 
-            print("Stopped ADio ADC data streaming.")    
+            print("Stopped ADio ADC data streaming.\n")    
 
 
 if __name__ == "__main__":

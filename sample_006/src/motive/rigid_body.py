@@ -23,7 +23,7 @@ class RigidBodyFrame:
 @dataclass(frozen=True)
 class RigidBodySample:
     wallclock_timestamp: float
-    perf_timestamp: int
+    perf_timestamp: float
     motive_timestamp: Optional[float]
     position: Vector3
     rotation: Quaternion
@@ -99,18 +99,18 @@ class RigidBodyReceiver:
         return rigid_bodies
 
     @staticmethod
-    def _get_timestamps(frame: dict) -> tuple[float, int, Optional[float]]:
-        received_time_ns = frame.get("received_time_ns")
-        received_perf_counter_ns = frame.get("received_perf_counter_ns")
+    def _get_timestamps(frame: dict) -> tuple[float, float, Optional[float]]:
+        received_time_sec = frame.get("received_time_sec")
+        received_perf_counter_sec = frame.get("received_perf_counter_sec")
         wallclock = (
-            received_time_ns / 1e9
-            if isinstance(received_time_ns, int) and received_time_ns >= 0
+            received_time_sec
+            if isinstance(received_time_sec, (int, float)) and received_time_sec >= 0
             else time.time()
         )
         perf = (
-            received_perf_counter_ns
-            if isinstance(received_perf_counter_ns, int) and received_perf_counter_ns >= 0
-            else time.perf_counter_ns()
+            received_perf_counter_sec
+            if isinstance(received_perf_counter_sec, (int, float)) and received_perf_counter_sec >= 0
+            else time.perf_counter()
         )
 
         timestamp = frame.get("timestamp")
@@ -122,9 +122,9 @@ class RigidBodyReceiver:
         with path.open("w", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(
                 [
-                    "Motive Time",
-                    "Wall Clock [s]",
-                    "Perf Counter [ns]",
+                    "Modality Time [sec]",
+                    "Wall Clock [unix sec]",
+                    "Perf Counter [sec]",
                     "x",
                     "y",
                     "z",

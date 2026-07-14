@@ -77,9 +77,9 @@ class NIADC:
             # Write header row
             header = [
                 "Sample Index",
-                "DAQ Time [s]",
-                "Wall Clock [s]",
-                "Perf Counter [ns]",
+                "Modality Time [sec]",
+                "Perf Counter [sec]",
+                "Wall Clock [unix sec]",
             ] + task.channel_names
             writer.writerow(header)
 
@@ -98,18 +98,18 @@ class NIADC:
                         number_of_samples_per_channel=self.samples_per_read,
                         timeout=max(10.0, expected_block_sec * 5),
                     )
-                    received_time_ns = time.time_ns()
-                    received_perf_counter_ns = time.perf_counter_ns()
+                    received_time_sec = time.time()
+                    received_perf_counter_sec = time.perf_counter()
 
                     data_arr = np.atleast_2d(np.asarray(data, dtype=float)).T
+                    daq_times = (np.arange(data_arr.shape[0], dtype=float) + sample_idx) / self.sampling_rate
 
                     for i in range(data_arr.shape[0]):
-                        daq_time = sample_idx / self.sampling_rate
                         row = [
                             sample_idx,
-                            f"{daq_time:.6f}",
-                            received_time_ns / 1e9,
-                            received_perf_counter_ns,
+                            f"{daq_times[i]:.6f}",
+                            received_perf_counter_sec,
+                            received_time_sec,
                         ] + data_arr[i].tolist()
                         writer.writerow(row)
                         sample_idx += 1
